@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# El Arsenal del Emperador — Web
 
-## Getting Started
+Tienda de coleccionables Warhammer 40.000. Frontend construido con **Next.js 16
+(App Router) + TypeScript + Tailwind v4**. Tema grimdark oscuro coherente con el
+hero. Comercio por WhatsApp (sin checkout online, ver brief §9).
 
-First, run the development server:
+## Arrancar
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev      # http://localhost:3000
+npm run build    # build de producción
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Estructura
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+app/
+  layout.tsx                 Fuentes (Oswald/Cinzel/Inter/JetBrains), header + footer, metadata
+  page.tsx                   Home: hero + destacados + facciones + lanzamientos + CTA
+  tienda/                    Catálogo (filtros, búsqueda, orden) — lee ?faction= de la URL
+  producto/[slug]/           Ficha: galería oficial/tienda, WhatsApp, JSON-LD, relacionados
+  proximos-lanzamientos/     coming_soon + formulario de reserva
+  nosotros/  contacto/       Páginas de soporte
+  not-found.tsx              404 con marca
+components/
+  hero.tsx                   Video dual-crossfade + brasas (canvas) + reveal (port de hero.html)
+  site-header / site-footer  Navegación responsive (header transparente sobre el hero)
+  catalog.tsx                Filtros/búsqueda/orden (client)
+  product-card / product-gallery / reservation-form / status-badge / whatsapp-button
+  ui/                        Primitivas estilo shadcn (button, input)
+  section.tsx                Eyebrow / SectionHeading / PageIntro
+lib/
+  config.ts                  Datos del negocio (WhatsApp, dirección, horarios) → pasar a env en prod
+  types.ts                   Modelo de datos (refleja el esquema Supabase del brief §6)
+  data.ts                    DATOS MOCK + helpers (getAllProducts, getBySlug, getFeatured…)
+  whatsapp.ts                Deep links wa.me con mensaje prellenado
+  utils.ts                   cn(), formatPrice(), formatDate()
+public/
+  products/bt-0X.jpg         Fotos placeholder (Black Templar) — reemplazar por fotos reales
+  video/hero-loop.mp4        Loop del hero
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Siguiente fase (backend)
 
-## Learn More
+Los datos viven en `lib/data.ts` (mock). Para el backend (brief §6–§7):
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Supabase: tablas `products`, `product_images`, `sales`, `reservations`, `factions` + RLS.
+2. Sustituir los helpers de `lib/data.ts` por consultas a Supabase (mismas firmas).
+3. Mover `SITE.whatsapp` y la URL a variables de entorno.
+4. Conectar `ReservationForm` a un Server Action que inserte en `reservations`.
+5. Panel `/admin` (Supabase Auth): CRUD de productos, marcar vendido, gestión de reservas.
+6. SEO: `sitemap.xml` + `robots.txt`, OG images.

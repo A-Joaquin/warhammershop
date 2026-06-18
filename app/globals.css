@@ -1,26 +1,169 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ============================================================
+   EL ARSENAL DEL EMPERADOR — Design tokens
+   Paleta grimdark 40k. Tema oscuro coherente con el hero.
+   ============================================================ */
+@theme {
+  --color-ink: #0e0d0c;
+  --color-ink-2: #141312;
+  --color-panel: #1a1917;
+  --color-char: #242220;
+  --color-steel: #46535b;
+  --color-smoke: #5c6368;
+  --color-ember: #f54c26;
+  --color-ember-2: #ff7a3c;
+  --color-gold: #c9a24b;
+  --color-bone: #ece6d8;
+
+  --font-display: var(--font-oswald), "Oswald", sans-serif;
+  --font-imperial: var(--font-cinzel), "Cinzel", serif;
+  --font-gothic: var(--font-pirata), "UnifrakturCook", "Cinzel", serif;
+  --font-sans: var(--font-inter), "Inter", sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", monospace;
+
+  --color-background: var(--color-ink);
+  --color-foreground: var(--color-bone);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-ink);
+  color: var(--color-bone);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Thin imperial scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-char);
+  border: 2px solid var(--color-ink);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-steel);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-ember) 85%, transparent);
+  color: var(--color-ink);
+}
+
+/* ---------- Reusable atmosphere ---------- */
+.headline-tick {
+  position: relative;
+  display: block;
+}
+.headline-tick::before {
+  content: "";
+  position: absolute;
+  top: -0.32em;
+  left: 0;
+  width: 60px;
+  height: 4px;
+  background: var(--color-ember);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--color-ember) 55%, transparent);
+}
+
+/* firelight flicker on load */
+@keyframes firelight {
+  0% {
+    text-shadow: 0 0 18px color-mix(in srgb, var(--color-ember) 55%, transparent),
+      0 0 40px color-mix(in srgb, var(--color-ember) 25%, transparent);
+  }
+  14% {
+    text-shadow: 0 0 8px color-mix(in srgb, var(--color-ember) 30%, transparent);
+  }
+  28% {
+    text-shadow: 0 0 26px color-mix(in srgb, var(--color-ember-2) 65%, transparent),
+      0 0 60px color-mix(in srgb, var(--color-ember) 30%, transparent);
+  }
+  42% {
+    text-shadow: 0 0 10px color-mix(in srgb, var(--color-ember) 25%, transparent);
+  }
+  60% {
+    text-shadow: 0 0 22px color-mix(in srgb, var(--color-ember) 55%, transparent);
+  }
+  78% {
+    text-shadow: 0 0 6px color-mix(in srgb, var(--color-ember) 20%, transparent);
+  }
+  100% {
+    text-shadow: 0 0 4px color-mix(in srgb, var(--color-ember) 12%, transparent);
+  }
+}
+.flicker {
+  animation: firelight 680ms steps(1, end) 1 both;
+}
+
+/* Glow de acento reutilizable (sigue el color dinámico --color-ember) */
+.glow-accent:hover {
+  box-shadow: 0 0 32px 2px color-mix(in srgb, var(--color-ember) 55%, transparent);
+}
+
+/* staggered reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+.reveal.in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* subtle rivet / panel texture using layered gradients */
+.panel-grain {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(236, 230, 216, 0.04) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+/* Barra de escaneo cyberpunk para la galería */
+@keyframes cyberscan {
+  0% { transform: translateY(-130%); }
+  100% { transform: translateY(130%); }
+}
+.cyber-scan {
+  animation: cyberscan 3.4s linear infinite;
+}
+
+/* Cinta infinita de logos (marquee). La pista lleva la lista duplicada,
+   así que desplazar -50% reinicia sin saltos. */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee var(--marquee-duration, 40s) linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cyber-scan { animation: none; }
+  .marquee-track { animation: none; }
+  html {
+    scroll-behavior: auto;
+  }
+  .flicker {
+    animation: none;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
 }
