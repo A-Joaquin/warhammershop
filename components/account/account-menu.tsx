@@ -76,7 +76,7 @@ export function AccountMenu() {
             <button
               type="button"
               onClick={() => {
-                signOut();
+                void signOut();
                 setOpen(false);
               }}
               className="flex w-full items-center gap-3 border-t border-char px-4 py-3 font-mono text-[11px] uppercase tracking-[0.14em] text-bone/70 transition-colors hover:bg-bone/5 hover:text-ember"

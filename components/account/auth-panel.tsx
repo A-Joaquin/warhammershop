@@ -1,15 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert, CheckCircle2 } from "lucide-react";
 import { useAccount } from "@/lib/contexts/account-context";
 import { LEGIONS } from "@/lib/data/legions";
+import { DEPARTMENTS } from "@/lib/data/departments";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LegionBadge } from "@/components/account/legion-badge";
 
 type Tab = "login" | "register";
+
+// Ingreso con Google: oculto por ahora. Ponlo en `true` cuando actives el
+// proveedor en Supabase (Auth → Providers → Google) para mostrar el botón.
+const SHOW_GOOGLE = false;
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -28,23 +33,42 @@ export function AuthPanel() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [department, setDepartment] = useState("");
   const [legion, setLegion] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const reset = () => setError(null);
-
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const res =
-      tab === "register"
-        ? signUp({ name, email, password, legion })
-        : signIn({ email, password });
-    if (!res.ok) setError(res.error ?? "Algo salió mal.");
+  const reset = () => {
+    setError(null);
+    setMessage(null);
   };
 
-  const onGoogle = () => {
-    const res = signInWithGoogle(tab === "register" ? legion : undefined);
-    if (!res.ok) setError(res.error ?? "No se pudo continuar con Google.");
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    reset();
+    const res =
+      tab === "register"
+        ? await signUp({ name, email, password, phone, department, legion })
+        : await signIn({ email, password });
+    setBusy(false);
+    if (!res.ok) setError(res.error ?? "Algo salió mal.");
+    else if (res.message) setMessage(res.message);
+  };
+
+  const onGoogle = async () => {
+    if (busy) return;
+    setBusy(true);
+    reset();
+    const res = await signInWithGoogle();
+    if (!res.ok) {
+      setBusy(false);
+      setError(res.error ?? "No se pudo continuar con Google.");
+    }
+    // si ok, el navegador redirige a Google
   };
 
   const loyalists = LEGIONS.filter((l) => l.allegiance === "loyalist");
@@ -111,6 +135,40 @@ export function AuthPanel() {
         </Field>
 
         {tab === "register" && (
+          <Field label="Teléfono (WhatsApp)">
+            <Input
+              type="tel"
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                reset();
+              }}
+              placeholder="Ej. 70123456"
+            />
+          </Field>
+        )}
+
+        {tab === "register" && (
+          <Field label="Departamento">
+            <select
+              value={department}
+              onChange={(e) => {
+                setDepartment(e.target.value);
+                reset();
+              }}
+              className="h-11 w-full border border-char bg-ink px-3 font-mono text-sm text-bone outline-none transition-colors focus:border-ember"
+            >
+              <option value="">Elige tu departamento</option>
+              {DEPARTMENTS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        {tab === "register" && (
           <div className="flex flex-col gap-2">
             <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-bone/45">
               Elige tu legión
@@ -141,32 +199,47 @@ export function AuthPanel() {
             <ShieldAlert className="h-3.5 w-3.5" /> {error}
           </p>
         )}
+        {message && (
+          <p className="flex items-center gap-1.5 font-mono text-[11px] text-emerald-400">
+            <CheckCircle2 className="h-3.5 w-3.5" /> {message}
+          </p>
+        )}
 
-        <Button type="submit" size="lg" className="mt-1 w-full">
-          {tab === "register" ? "Crear mi cuenta" : "Ingresar"}
+        <Button type="submit" size="lg" className="mt-1 w-full" disabled={busy}>
+          {busy
+            ? "Procesando…"
+            : tab === "register"
+              ? "Crear mi cuenta"
+              : "Ingresar"}
         </Button>
       </form>
 
-      {/* Separador */}
-      <div className="my-5 flex items-center gap-3">
-        <span className="h-px flex-1 bg-char" />
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-bone/35">
-          o
-        </span>
-        <span className="h-px flex-1 bg-char" />
-      </div>
+      {/* Ingreso con Google — oculto por ahora (ver SHOW_GOOGLE arriba) */}
+      {SHOW_GOOGLE && (
+        <>
+          {/* Separador */}
+          <div className="my-5 flex items-center gap-3">
+            <span className="h-px flex-1 bg-char" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-bone/35">
+              o
+            </span>
+            <span className="h-px flex-1 bg-char" />
+          </div>
 
-      <button
-        type="button"
-        onClick={onGoogle}
-        className="flex w-full items-center justify-center gap-3 border border-char bg-bone px-5 py-3 font-display text-sm font-semibold uppercase tracking-[0.1em] text-ink transition-colors hover:bg-white"
-      >
-        <GoogleIcon className="h-5 w-5" />
-        Continuar con Google
-      </button>
-      <p className="mt-3 text-center font-mono text-[9px] leading-relaxed tracking-[0.08em] text-bone/30">
-        Demo: el ingreso con Google está simulado hasta conectar Supabase Auth.
-      </p>
+          <button
+            type="button"
+            onClick={onGoogle}
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-3 border border-char bg-bone px-5 py-3 font-display text-sm font-semibold uppercase tracking-[0.1em] text-ink transition-colors hover:bg-white disabled:opacity-60"
+          >
+            <GoogleIcon className="h-5 w-5" />
+            Continuar con Google
+          </button>
+          <p className="mt-3 text-center font-mono text-[9px] leading-relaxed tracking-[0.08em] text-bone/30">
+            Si entras con Google, completa tu teléfono y departamento en tu perfil.
+          </p>
+        </>
+      )}
     </div>
   );
 }

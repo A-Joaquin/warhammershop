@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# originales del collage (los servidos viven en /public/collage_productos)
+/collage_productos/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

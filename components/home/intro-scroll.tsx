@@ -34,6 +34,8 @@ export function IntroScroll() {
   const emberRef = useRef<HTMLCanvasElement>(null);
   const introRef = useRef<HTMLDivElement>(null);
   const outroRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const galleryRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let killed = false;
@@ -45,6 +47,8 @@ export function IntroScroll() {
       const { MotionPathPlugin } = await import("gsap/MotionPathPlugin");
       if (killed) return;
       gsap.registerPlugin(ScrollTrigger, MotionPathPlugin);
+
+      let galleryTimer: ReturnType<typeof setInterval> | undefined;
 
       const ctx = gsap.context(() => {
         const q = gsap.utils.selector(rootRef);
@@ -70,12 +74,12 @@ export function IntroScroll() {
         gsap.set(missiles, { autoAlpha: 0, scale: 0, opacity: 0, transformOrigin: "center" });
         gsap.set(impacts, { autoAlpha: 0, scale: 0, opacity: 0, transformOrigin: "center" });
 
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         const desktop =
-          window.matchMedia("(min-width: 1024px)").matches &&
-          !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          window.matchMedia("(min-width: 1024px)").matches && !reduced;
 
-        // Móvil / reduced-motion: apilado vertical, estado final estático.
-        if (!desktop) {
+        // Reduced-motion: apilado vertical, estado final estático (sin animar nada).
+        if (reduced) {
           arcs.forEach((a) => {
             const len = a.getTotalLength();
             gsap.set(a, { strokeDasharray: len, strokeDashoffset: 0, opacity: 0.32 });
@@ -83,8 +87,95 @@ export function IntroScroll() {
           gsap.set(markers, { autoAlpha: 1 });
           gsap.set(introRef.current, { autoAlpha: 0, display: "none" });
           gsap.set(outroRef.current, { autoAlpha: 1 });
-          gsap.set(gimgs, { autoAlpha: 1 });
+          gsap.set(gimgs, { autoAlpha: 0 });
+          gsap.set(gimgs[0], { autoAlpha: 1 });
           gsap.set(gdots, { autoAlpha: 0.4 });
+          return;
+        }
+
+        // ───────────────────────── MÓVIL/TABLET (<1024px) ─────────────────────
+        // Apilado vertical, pero CON animaciones disparadas por el scroll vertical
+        // (sin pin horizontal, que es incómodo en celular).
+        if (!desktop) {
+          // Estado inicial de los misiles (arcos ocultos, marcadores tenues).
+          DEPTS.forEach((d, i) => {
+            const arc = arcs[i];
+            if (!arc) return;
+            const len = arc.getTotalLength();
+            gsap.set(arc, { strokeDasharray: len, strokeDashoffset: len, opacity: 1 });
+            gsap.set(markers[i], { autoAlpha: 0.18 });
+          });
+          gsap.set(introRef.current, { autoAlpha: 0, display: "none" });
+          gsap.set(outroRef.current, { autoAlpha: 1 });
+
+          // Galería: solo la primera imagen visible (luego se ciclan).
+          gsap.set(gimgs, { autoAlpha: 0 });
+          gsap.set(gimgs[0], { autoAlpha: 1 });
+          gsap.set(gdots, { autoAlpha: 0.25 });
+          gsap.set(gdots[0], { autoAlpha: 1 });
+
+          // Bombardeo de misiles: se reproduce una vez al entrar el mapa en pantalla.
+          const missileTl = gsap.timeline({ paused: true, defaults: { ease: "none" } });
+          const M_STEP = 0.16, M_FLY = 0.32;
+          DEPTS.forEach((d, i) => {
+            const arc = arcs[i];
+            if (!arc) return;
+            const p = i * M_STEP;
+            missileTl
+              .set(missiles[i], { autoAlpha: 1, opacity: 1, scale: 1 }, p)
+              .to(missiles[i], { motionPath: { path: arc, autoRotate: false }, duration: M_FLY }, p)
+              .to(arc, { strokeDashoffset: 0, duration: M_FLY }, p)
+              .set(missiles[i], { autoAlpha: 0, scale: 0 }, p + M_FLY)
+              .to(impacts[i], { autoAlpha: 1, scale: 1, opacity: 1, duration: 0.15, ease: "power2.out" }, p + M_FLY - 0.05)
+              .to(impacts[i], { autoAlpha: 0, scale: 0, opacity: 0, duration: 0.3, ease: "power1.in" }, p + M_FLY + 0.1)
+              .to(markers[i], { autoAlpha: 1, duration: 0.15 }, p + M_FLY - 0.05)
+              .to(arc, { opacity: 0.32, duration: 0.4 }, p + M_FLY + 0.05);
+          });
+
+          ScrollTrigger.create({
+            trigger: mapRef.current,
+            start: "top 70%",
+            once: true,
+            onEnter: () => missileTl.play(),
+          });
+
+          // Galería: ciclo automático con destello "glitch" mientras está en pantalla.
+          const CA = "drop-shadow(3px 0 #ff7a3c) drop-shadow(-3px 0 #ffd86b) saturate(1.4)";
+          let gi = 0;
+          const cycle = () => {
+            const cur = gi;
+            const next = (gi + 1) % GALLERY.length;
+            const a = gimgs[cur];
+            const b = gimgs[next];
+            if (!a || !b) return;
+            gsap
+              .timeline()
+              .to(a, { filter: CA, x: 6, duration: 0.1, ease: "steps(2)" })
+              .to(a, { autoAlpha: 0, x: 0, filter: "none", duration: 0.2 })
+              .fromTo(
+                b,
+                { autoAlpha: 0, x: -6, filter: CA },
+                { autoAlpha: 1, x: 0, filter: "none", duration: 0.28, ease: "steps(3)" },
+                "<"
+              );
+            gsap.to(gdots[cur], { autoAlpha: 0.25, duration: 0.3 });
+            gsap.to(gdots[next], { autoAlpha: 1, duration: 0.3 });
+            gi = next;
+          };
+
+          let galleryVisible = false;
+          ScrollTrigger.create({
+            trigger: galleryRef.current,
+            start: "top 85%",
+            end: "bottom 15%",
+            onToggle: (self) => {
+              galleryVisible = self.isActive;
+            },
+          });
+          galleryTimer = setInterval(() => {
+            if (galleryVisible) cycle();
+          }, 2600);
+
           return;
         }
 
@@ -183,7 +274,19 @@ export function IntroScroll() {
         }
       }, rootRef);
 
-      cleanup = () => ctx.revert();
+      // Recalcular posiciones del pin cuando imágenes/fuentes terminen de cargar.
+      // Evita que el riel quede desfasado (paneles "en blanco") en la primera
+      // carga o tras un hot-reload del dev server.
+      requestAnimationFrame(() => ScrollTrigger.refresh());
+      const onLoad = () => ScrollTrigger.refresh();
+      if (document.readyState !== "complete")
+        window.addEventListener("load", onLoad, { once: true });
+
+      cleanup = () => {
+        if (galleryTimer) clearInterval(galleryTimer);
+        window.removeEventListener("load", onLoad);
+        ctx.revert();
+      };
     })();
 
     return () => {
@@ -259,8 +362,8 @@ export function IntroScroll() {
           </div>
 
           {/* Panel 2 — Mapa de envíos */}
-          <div className="relative flex w-full shrink-0 items-center lg:h-full lg:w-screen">
-            <div className="relative z-10 flex w-full max-w-[1500px] flex-col items-center justify-center gap-6 px-6 py-24 lg:flex-row lg:justify-start lg:gap-0 lg:py-0 lg:pl-0 lg:pr-12">
+          <div ref={mapRef} className="relative flex w-full shrink-0 items-center lg:h-full lg:w-screen">
+            <div className="relative z-10 flex w-full max-w-[1500px] flex-col items-center justify-center gap-6 px-6 pt-6 pb-8 lg:flex-row lg:justify-start lg:gap-0 lg:py-0 lg:pl-0 lg:pr-12">
               <div className="relative z-20 w-full shrink-0 lg:-ml-[1vw] lg:w-[36%]">
                 <div ref={introRef}>
                   <p className="font-mono text-[12px] uppercase tracking-[0.28em] text-ember">
@@ -276,7 +379,7 @@ export function IntroScroll() {
                   </p>
                 </div>
 
-                <div ref={outroRef} className="absolute inset-0" style={{ opacity: 0 }}>
+                <div ref={outroRef} className="mt-8 lg:mt-0 lg:absolute lg:inset-0" style={{ opacity: 0 }}>
                   <p className="font-mono text-[12px] uppercase tracking-[0.28em] text-ember">
                     — Cobertura nacional
                   </p>
@@ -355,8 +458,8 @@ export function IntroScroll() {
           </div>
 
           {/* Panel 3 — Galería */}
-          <div className="relative z-20 flex w-full shrink-0 items-center lg:h-full lg:w-screen lg:-ml-[32vw]">
-            <div className="relative z-10 flex w-full max-w-[1500px] flex-col items-center justify-center gap-8 px-6 py-24 lg:max-w-[940px] lg:flex-row lg:justify-start lg:gap-40 lg:py-0 lg:pl-[1vw] lg:pr-0">
+          <div ref={galleryRef} className="relative z-20 flex w-full shrink-0 items-center lg:h-full lg:w-screen lg:-ml-[32vw]">
+            <div className="relative z-10 flex w-full max-w-[1500px] flex-col items-center justify-center gap-8 px-6 pt-2 pb-16 lg:max-w-[940px] lg:flex-row lg:justify-start lg:gap-40 lg:py-0 lg:pl-[1vw] lg:pr-0">
               {/* Texto */}
               <div className="z-20 w-full shrink-0 lg:-ml-[3vw] lg:w-[36%]">
                 <p className="font-mono text-[12px] uppercase tracking-[0.28em] text-ember">

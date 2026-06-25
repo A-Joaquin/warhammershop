@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { Search, SlidersHorizontal, X, Rocket } from "lucide-react";
 import type { Product, ProductStatus } from "@/lib/types";
 import { factionName, factionAccent } from "@/lib/data/factions";
 import { legionForSlug } from "@/lib/data/legions";
@@ -34,6 +34,7 @@ export function Catalog({
   const [faction, setFaction] = useState(initialFaction);
   const [category, setCategory] = useState(initialCategory);
   const [statuses, setStatuses] = useState<ProductStatus[]>([]);
+  const [launch, setLaunch] = useState(""); // id del lanzamiento (coming_soon) elegido
   const [sort, setSort] = useState<SortKey>("novedad");
   const [mobileFilters, setMobileFilters] = useState(false);
 
@@ -41,6 +42,12 @@ export function Catalog({
     setStatuses((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
     );
+
+  // Al cambiar de facción, el lanzamiento elegido podría no pertenecerle: lo limpiamos.
+  const selectFaction = (slug: string) => {
+    setFaction(slug);
+    setLaunch("");
+  };
 
   // Facciones/marcas presentes en el catálogo (incluye las nuevas no-Warhammer).
   const factionOptions = useMemo(() => {
@@ -66,12 +73,36 @@ export function Catalog({
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [products]);
 
+  // ¿Hay próximos lanzamientos en el catálogo? (define si se muestra el apartado).
+  const hasLaunches = useMemo(
+    () => products.some((p) => p.status === "coming_soon"),
+    [products]
+  );
+
+  // Lanzamientos (coming_soon) disponibles, acotados a la facción seleccionada.
+  const launchOptions = useMemo(
+    () =>
+      products
+        .filter(
+          (p) =>
+            p.status === "coming_soon" && (!faction || p.faction === faction)
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [products, faction]
+  );
+
   const filtered = useMemo(() => {
     let list = products.filter((p) => {
       if (faction && p.faction !== faction) return false;
       if (category && p.category !== category && p.category2 !== category)
         return false;
-      if (statuses.length && !statuses.includes(p.status)) return false;
+      // Si hay un lanzamiento elegido, manda él (ignora el filtro de estado);
+      // si no, aplica el filtro de estado normal.
+      if (launch) {
+        if (p.id !== launch) return false;
+      } else if (statuses.length && !statuses.includes(p.status)) {
+        return false;
+      }
       if (query) {
         const q = query.toLowerCase();
         const hay = `${p.name} ${p.line} ${p.sku}`.toLowerCase();
@@ -92,9 +123,10 @@ export function Catalog({
       }
     });
     return list;
-  }, [products, faction, statuses, query, sort]);
+  }, [products, faction, category, statuses, launch, query, sort]);
 
-  const hasActiveFilters = faction || category || statuses.length > 0 || query;
+  const hasActiveFilters =
+    faction || category || statuses.length > 0 || launch || query;
 
   // Ícono de una facción: el guardado en la facción o, si no, el de la legión
   // que coincida por slug.
@@ -111,6 +143,7 @@ export function Catalog({
     setFaction("");
     setCategory("");
     setStatuses([]);
+    setLaunch("");
     setQuery("");
   };
 
@@ -123,7 +156,7 @@ export function Catalog({
         </h3>
         <div className="mt-3 flex flex-col gap-1">
           <button
-            onClick={() => setFaction("")}
+            onClick={() => selectFaction("")}
             className={cn(
               "flex items-center justify-between px-3 py-2 text-left font-display text-sm uppercase tracking-wide transition-colors",
               faction === ""
@@ -138,7 +171,7 @@ export function Catalog({
             return (
               <button
                 key={f.slug}
-                onClick={() => setFaction(f.slug)}
+                onClick={() => selectFaction(f.slug)}
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 text-left font-display text-sm uppercase tracking-wide transition-colors",
                   faction === f.slug
@@ -167,6 +200,61 @@ export function Catalog({
         </div>
       </div>
 
+      {/* Estado */}
+      <div>
+        <h3 className="font-mono text-[11px] tracking-[0.24em] uppercase text-bone/40">
+          Estado
+        </h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => toggleStatus(s.value)}
+              className={cn(
+                "border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
+                statuses.includes(s.value)
+                  ? "border-ember bg-ember/10 text-ember"
+                  : "border-char text-bone/55 hover:border-steel"
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Lanzamientos (próximos = coming_soon), acotados por la facción elegida */}
+      {hasLaunches && (
+        <div>
+          <h3 className="font-mono text-[11px] tracking-[0.24em] uppercase text-bone/40">
+            Lanzamientos
+          </h3>
+          {launchOptions.length === 0 ? (
+            <p className="mt-3 font-mono text-[11px] text-bone/35">
+              Sin lanzamientos para esta facción.
+            </p>
+          ) : (
+            <div className="mt-3 flex flex-col gap-1">
+              {launchOptions.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setLaunch(launch === p.id ? "" : p.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 text-left font-display text-sm uppercase tracking-wide transition-colors",
+                    launch === p.id
+                      ? "bg-ember/10 text-ember"
+                      : "text-bone/60 hover:text-bone"
+                  )}
+                >
+                  <Rocket className="h-3.5 w-3.5 shrink-0 text-ember/70" />
+                  <span className="truncate">{p.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Categoría */}
       {categoryOptions.length > 0 && (
         <div>
@@ -191,29 +279,6 @@ export function Catalog({
           </div>
         </div>
       )}
-
-      {/* Estado */}
-      <div>
-        <h3 className="font-mono text-[11px] tracking-[0.24em] uppercase text-bone/40">
-          Estado
-        </h3>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => toggleStatus(s.value)}
-              className={cn(
-                "border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
-                statuses.includes(s.value)
-                  ? "border-ember bg-ember/10 text-ember"
-                  : "border-char text-bone/55 hover:border-steel"
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PageIntro } from "@/components/section";
 import { Catalog } from "@/components/catalog/catalog";
+import { SoldCollage } from "@/components/catalog/sold-collage";
 import { getAllProducts, getFactions } from "@/lib/catalog";
 
 export const metadata: Metadata = {
@@ -42,6 +43,7 @@ export default async function TiendaPage({
         initialFaction={faction ?? ""}
         initialCategory={category ?? ""}
       />
+      <SoldCollage />
     </>
   );
 }

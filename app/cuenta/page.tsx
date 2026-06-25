@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, LogOut, Mail, Pencil } from "lucide-react";
+import { Check, LogOut, Mail, Pencil, Phone, MapPin } from "lucide-react";
 import { useAccount } from "@/lib/contexts/account-context";
 import { getLegion, LEGIONS } from "@/lib/data/legions";
+import { DEPARTMENTS } from "@/lib/data/departments";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { LegionBadge } from "@/components/account/legion-badge";
 import { AuthPanel } from "@/components/account/auth-panel";
 
 export default function CuentaPage() {
-  const { ready, user, signOut, updateLegion } = useAccount();
+  const { ready, user, signOut, updateLegion, updateProfile } = useAccount();
   const [editLegion, setEditLegion] = useState(false);
 
   return (
@@ -37,6 +40,7 @@ export default function CuentaPage() {
           editLegion={editLegion}
           setEditLegion={setEditLegion}
           updateLegion={updateLegion}
+          updateProfile={updateProfile}
           signOut={signOut}
         />
       )}
@@ -49,13 +53,15 @@ function ProfileView({
   editLegion,
   setEditLegion,
   updateLegion,
+  updateProfile,
   signOut,
 }: {
   user: NonNullable<ReturnType<typeof useAccount>["user"]>;
   editLegion: boolean;
   setEditLegion: (v: boolean) => void;
-  updateLegion: (id: string) => void;
-  signOut: () => void;
+  updateLegion: ReturnType<typeof useAccount>["updateLegion"];
+  updateProfile: ReturnType<typeof useAccount>["updateProfile"];
+  signOut: () => void | Promise<void>;
 }) {
   const legion = getLegion(user.legion);
   const loyalists = LEGIONS.filter((l) => l.allegiance === "loyalist");
@@ -93,12 +99,15 @@ function ProfileView({
         </div>
         <button
           type="button"
-          onClick={signOut}
+          onClick={() => void signOut()}
           className="inline-flex items-center gap-2 border border-bone/30 px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-bone/70 transition-colors hover:border-ember hover:text-ember"
         >
           <LogOut className="h-4 w-4" /> Salir
         </button>
       </div>
+
+      {/* Datos de contacto */}
+      <ContactCard user={user} updateProfile={updateProfile} />
 
       {/* Cambiar legión */}
       <div className="mt-6 border border-char bg-ink-2 p-6">
@@ -117,8 +126,8 @@ function ProfileView({
 
         {editLegion ? (
           <div className="mt-4 flex flex-col gap-4">
-            <LegionGrid title="Leales" legions={loyalists} selected={user.legion} onSelect={updateLegion} />
-            <LegionGrid title="Traidoras" legions={traitors} selected={user.legion} onSelect={updateLegion} />
+            <LegionGrid title="Leales" legions={loyalists} selected={user.legion} onSelect={(id) => void updateLegion(id)} />
+            <LegionGrid title="Traidoras" legions={traitors} selected={user.legion} onSelect={(id) => void updateLegion(id)} />
           </div>
         ) : (
           <p className="mt-3 font-mono text-[12px] tracking-[0.06em] text-bone/50">
@@ -143,6 +152,101 @@ function ProfileView({
           Inicio
         </Link>
       </div>
+    </div>
+  );
+}
+
+function ContactCard({
+  user,
+  updateProfile,
+}: {
+  user: NonNullable<ReturnType<typeof useAccount>["user"]>;
+  updateProfile: ReturnType<typeof useAccount>["updateProfile"];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [phone, setPhone] = useState(user.phone);
+  const [department, setDepartment] = useState(user.department);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onSave = async () => {
+    setBusy(true);
+    setError(null);
+    const res = await updateProfile({ phone: phone.trim(), department });
+    setBusy(false);
+    if (!res.ok) setError(res.error ?? "No se pudo guardar.");
+    else setEditing(false);
+  };
+
+  return (
+    <div className="mt-6 border border-char bg-ink-2 p-6">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg font-bold uppercase tracking-[0.08em] text-bone">
+          Datos de contacto
+        </h2>
+        <button
+          type="button"
+          onClick={() => {
+            setEditing((v) => !v);
+            setPhone(user.phone);
+            setDepartment(user.department);
+            setError(null);
+          }}
+          className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-ember/80 hover:text-ember"
+        >
+          <Pencil className="h-3.5 w-3.5" /> {editing ? "Cerrar" : "Editar"}
+        </button>
+      </div>
+
+      {editing ? (
+        <div className="mt-4 flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-bone/45">
+              Teléfono (WhatsApp)
+            </span>
+            <Input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Ej. 70123456"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-bone/45">
+              Departamento
+            </span>
+            <select
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              className="h-11 w-full border border-char bg-ink px-3 font-mono text-sm text-bone outline-none transition-colors focus:border-ember"
+            >
+              <option value="">Elige tu departamento</option>
+              {DEPARTMENTS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </label>
+          {error && (
+            <p className="font-mono text-[11px] text-red-400">{error}</p>
+          )}
+          <Button onClick={onSave} disabled={busy} className="self-start">
+            {busy ? "Guardando…" : "Guardar"}
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-col gap-2 font-mono text-[12px] tracking-[0.06em] text-bone/60">
+          <p className="flex items-center gap-2">
+            <Phone className="h-3.5 w-3.5 text-bone/40" />
+            {user.phone || "Sin teléfono"}
+          </p>
+          <p className="flex items-center gap-2">
+            <MapPin className="h-3.5 w-3.5 text-bone/40" />
+            {user.department || "Sin departamento"}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

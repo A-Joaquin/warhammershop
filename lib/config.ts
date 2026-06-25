@@ -23,14 +23,12 @@ export const SITE = {
   // ───────────────────────────────────────────────────────────────────────
   whatsapp: process.env.NEXT_PUBLIC_WHATSAPP ?? "59174167466",
   email: "contacto@elarsenaldelemperador.com",
-  city: "Santa Cruz de la Sierra, Bolivia",
-  address: "Av. Imperial #2041, Galería El Bastión, Local M41",
-  hours: "Lun a Sáb · 10:00 — 20:00",
+  city: "Cochabamba, Bolivia",
+  address: "Tienda virtual",
+  hours: "Lun a Dom · 10:00 — 20:00",
   currency: "BOB",
   social: {
-    instagram: "https://instagram.com",
-    facebook: "https://facebook.com",
-    tiktok: "https://tiktok.com",
+    facebook: "https://www.facebook.com/profile.php?id=61559852395990",
   },
 } as const;
 

@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { MapPin, Clock, Mail } from "lucide-react";
 
-function InstagramIcon({ className }: { className?: string }) {
+function FacebookIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}>
-      <rect x="2" y="2" width="20" height="20" rx="5" />
-      <circle cx="12" cy="12" r="4" />
-      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07c0 6.02 4.39 11.01 10.13 11.93v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.95.93-1.95 1.88v2.26h3.32l-.53 3.49h-2.79V24C19.61 23.08 24 18.09 24 12.07z" />
     </svg>
   );
 }
@@ -77,36 +76,49 @@ export default function ContactoPage() {
                 Síguenos
               </span>
               <a
-                href={SITE.social.instagram}
+                href={SITE.social.facebook}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex h-9 w-9 items-center justify-center border border-char text-bone/60 transition-colors hover:border-ember hover:text-ember"
-                aria-label="Instagram"
+                aria-label="Facebook"
               >
-                <InstagramIcon className="h-4 w-4" />
+                <FacebookIcon className="h-4 w-4" />
               </a>
             </div>
           </div>
 
-          {/* Mapa placeholder */}
-          <div className="relative min-h-[340px] overflow-hidden border border-char bg-ink-2 panel-grain">
+          {/* Mapa: Bolivia con Cochabamba iluminada */}
+          <div className="relative flex min-h-[340px] items-center justify-center overflow-hidden border border-char bg-ink-2 panel-grain p-6">
             <div
-              className="absolute inset-0 opacity-40"
+              className="pointer-events-none absolute inset-0 opacity-40"
               style={{
                 background:
-                  "radial-gradient(80% 80% at 50% 30%, color-mix(in srgb, var(--color-ember) 18%, transparent) 0%, transparent 60%)",
+                  "radial-gradient(80% 80% at 41% 54%, color-mix(in srgb, var(--color-ember) 22%, transparent) 0%, transparent 55%)",
               }}
             />
-            <div className="relative flex h-full flex-col items-center justify-center p-8 text-center">
-              <MapPin className="h-10 w-10 text-ember" />
-              <p className="mt-4 font-display text-xl font-semibold uppercase tracking-wide text-bone">
-                {SITE.city}
-              </p>
-              <p className="mt-1 max-w-xs text-sm text-bone/50">{SITE.address}</p>
-              <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.2em] text-bone/35">
-                Mapa interactivo · próximamente
-              </p>
+            <div className="relative aspect-square w-full max-w-[440px]">
+              <Image
+                src="/mapabolivia.png"
+                alt="Mapa de Bolivia — Cochabamba, sede del Arsenal"
+                fill
+                sizes="(max-width:1024px) 90vw, 45vw"
+                className="object-contain"
+              />
+              {/* Marcador iluminado de Cochabamba (origen, 41% / 54%) */}
+              <div
+                className="absolute h-3 w-3"
+                style={{ left: "41%", top: "54%", transform: "translate(-50%,-50%)" }}
+              >
+                <span className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ember/40 animate-ping" />
+                <span
+                  className="absolute inset-0 rounded-full bg-ember"
+                  style={{ boxShadow: "0 0 14px 2px var(--color-ember)" }}
+                />
+              </div>
             </div>
+            <p className="absolute bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.2em] text-bone/40">
+              Tienda virtual · {SITE.city}
+            </p>
           </div>
         </div>
       </div>

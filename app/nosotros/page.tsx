@@ -3,6 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Brush, ShieldCheck, Globe2, Heart } from "lucide-react";
 import { PageIntro, Eyebrow } from "@/components/section";
+import { SoldCollage } from "@/components/catalog/sold-collage";
 import { SITE } from "@/lib/config";
 
 export const metadata: Metadata = {
@@ -69,17 +70,17 @@ export default function NosotrosPage() {
             </div>
           </div>
 
-          <div className="relative aspect-[4/5] overflow-hidden border border-char bg-gradient-to-b from-[#f4f1ea] to-[#cdc7ba]">
+          <div className="relative aspect-[4/5] overflow-hidden border border-char bg-ink-2">
             <Image
-              src="/products/bt-01.jpg"
-              alt="Miniatura Black Templar pintada a nivel de exposición"
+              src="/collage_productos/33.jpg"
+              alt="Miniatura Warhammer 40.000 pintada a nivel de exposición — pieza del Arsenal"
               fill
               sizes="(max-width:1024px) 100vw, 50vw"
-              className="object-contain p-8"
+              className="object-cover"
             />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-ink/80 to-transparent p-5">
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-bone/80">
-                Black Templar · Pieza de colección
+                Pieza de colección · El Arsenal
               </p>
             </div>
           </div>
@@ -104,6 +105,9 @@ export default function NosotrosPage() {
           </div>
         </div>
       </section>
+
+      {/* Collage de piezas vendidas */}
+      <SoldCollage />
 
       {/* CTA */}
       <section className="mx-auto max-w-3xl px-6 py-20 text-center md:py-24">

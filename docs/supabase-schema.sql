@@ -140,11 +140,17 @@ create table if not exists profiles (
   id         uuid primary key references auth.users(id) on delete cascade,
   name       text,
   email      text,
+  phone      text,                     -- WhatsApp / teléfono de contacto
+  department text,                     -- departamento de Bolivia (para envíos)
   legion     text references legions(id) on delete set null,
   provider   text default 'email',     -- 'email' | 'google'
   role       user_role not null default 'customer',
   created_at timestamptz not null default now()
 );
+
+-- Migración para bases ya creadas (idempotente): añade las columnas si faltan.
+alter table profiles add column if not exists phone      text;
+alter table profiles add column if not exists department text;
 
 -- ------------------------------------------------------------------- ÍNDICES
 create index if not exists idx_products_status        on products (status);
@@ -178,16 +184,19 @@ create trigger products_touch_updated
   before update on public.products
   for each row execute function public.touch_updated_at();
 
--- 8.3 Crear profile al registrarse (lee metadata del signUp: name, legion, provider)
+-- 8.3 Crear profile al registrarse
+-- (lee metadata del signUp: name, legion, provider, phone, department)
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, name, email, legion, provider)
+  insert into public.profiles (id, name, email, phone, department, legion, provider)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     new.email,
+    new.raw_user_meta_data->>'phone',
+    new.raw_user_meta_data->>'department',
     new.raw_user_meta_data->>'legion',
     coalesce(new.raw_user_meta_data->>'provider', 'email')
   );
