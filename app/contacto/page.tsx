@@ -98,7 +98,7 @@ export default function ContactoPage() {
             />
             <div className="relative aspect-square w-full max-w-[440px]">
               <Image
-                src="/mapabolivia.png"
+                src="/mapabolivia.webp"
                 alt="Mapa de Bolivia — Cochabamba, sede del Arsenal"
                 fill
                 sizes="(max-width:1024px) 90vw, 45vw"

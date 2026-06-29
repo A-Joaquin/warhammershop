@@ -233,7 +233,7 @@ export default async function HomePage() {
           {/* La bandera se sale de su contenedor e invade el panel de texto. */}
           <div className="relative z-10 -mb-12 w-full max-w-2xl shrink-0 md:-mb-0 md:-mr-28 lg:-mr-40 lg:max-w-3xl">
             <Image
-              src="/bandera.png"
+              src="/bandera.webp"
               alt="Estandarte imperial con la bandera de Bolivia"
               width={1451}
               height={1084}

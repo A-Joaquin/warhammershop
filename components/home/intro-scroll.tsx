@@ -404,7 +404,7 @@ export function IntroScroll() {
               {/* Mapa + misiles */}
               <div className="relative aspect-square w-full max-w-[min(78vh,620px)] lg:w-[54%]">
                 <Image
-                  src="/mapabolivia.png"
+                  src="/mapabolivia.webp"
                   alt="Mapa de Bolivia con los 9 departamentos"
                   fill
                   sizes="(max-width:1024px) 90vw, 55vw"
