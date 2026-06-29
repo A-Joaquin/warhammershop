@@ -12,7 +12,7 @@ export const SITE = {
   description:
     "Miniaturas originales y piezas de colección Warhammer 40.000. Reserva próximos lanzamientos y coordina tu envío a todo el país por WhatsApp.",
   // URL pública del sitio (dominio real en producción). Override: NEXT_PUBLIC_SITE_URL.
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://elarsenaldelemperador.com",
+  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://arsenaldelemperador.vercel.app",
   // ───────────────────────────────────────────────────────────────────────
   // NÚMERO DE WHATSAPP DEL NEGOCIO
   // Formato wa.me: código de país + número, SIN el '+', SIN espacios ni guiones.
