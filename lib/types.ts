@@ -41,6 +41,44 @@ export interface Product {
   purchasePrice?: number; // lo que costó la pieza en BOB (sin impuesto)
   purchasePriceUsd?: number; // costo equivalente en USD al comprar (par de monedas)
   taxRate?: number; // % de impuesto sobre la compra
+  discount?: ProductDiscount; // descuento vigente (si tiene)
+}
+
+export interface ProductDiscount {
+  id: string;
+  type: "percentage" | "fixed";
+  value: number;
+  validFrom?: string; // "YYYY-MM-DD"
+  validUntil?: string; // "YYYY-MM-DD"
+  createdAt: string;
+}
+
+/** ¿Sigue vigente el descuento hoy? (respeta validFrom/validUntil si están cargados). */
+export function isDiscountActive(
+  discount: ProductDiscount | undefined,
+  today: Date = new Date()
+): boolean {
+  if (!discount) return false;
+  const day = today.toISOString().slice(0, 10);
+  if (discount.validFrom && day < discount.validFrom) return false;
+  if (discount.validUntil && day > discount.validUntil) return false;
+  return true;
+}
+
+/** Precio final tras aplicar el descuento vigente (o el precio normal si no hay).
+ *  En porcentaje, el monto se redondea siempre hacia arriba (a favor del cliente). */
+export function discountedPrice(p: Pick<Product, "price" | "discount">): number {
+  if (!isDiscountActive(p.discount)) return p.price;
+  const off =
+    p.discount!.type === "percentage"
+      ? Math.ceil(p.price * (p.discount!.value / 100))
+      : p.discount!.value;
+  return Math.max(0, p.price - off);
+}
+
+/** Monto exacto que se resta del precio (ya con el redondeo de discountedPrice aplicado). */
+export function discountAmount(p: Pick<Product, "price" | "discount">): number {
+  return p.price - discountedPrice(p);
 }
 
 export interface Faction {

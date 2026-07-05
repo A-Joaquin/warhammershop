@@ -10,6 +10,7 @@ import {
   CalendarClock,
   Rocket,
   BarChart3,
+  BadgePercent,
   LogOut,
   ExternalLink,
   Menu,
@@ -24,6 +25,7 @@ import { AdminLogin } from "@/components/admin/admin-login";
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/productos", label: "Productos", icon: Boxes },
+  { href: "/admin/descuentos", label: "Descuentos", icon: BadgePercent },
   { href: "/admin/ventas", label: "Ventas", icon: Receipt },
   { href: "/admin/estadisticas", label: "Estadísticas", icon: BarChart3 },
   { href: "/admin/reservas", label: "Reservas", icon: CalendarClock },

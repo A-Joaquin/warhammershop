@@ -31,6 +31,8 @@ do $$ begin create type legion_allegiance  as enum ('loyalist','traitor');
   exception when duplicate_object then null; end $$;
 do $$ begin create type user_role          as enum ('customer','admin');
   exception when duplicate_object then null; end $$;
+do $$ begin create type discount_type      as enum ('percentage','fixed');
+  exception when duplicate_object then null; end $$;
 
 -- ------------------------------------------------------ 5. TABLAS DE CATÁLOGO
 create table if not exists factions (
@@ -125,6 +127,22 @@ create table if not exists combo_items (
 );
 create index if not exists idx_combo_items_combo on combo_items (combo_id);
 create index if not exists idx_combo_items_product on combo_items (product_id);
+
+-- Historial de descuentos por producto (nunca se actualiza/borra una fila vieja;
+-- cada cambio de descuento inserta una fila nueva). `products.discount_id` apunta
+-- al descuento vigente; se agrega con ALTER porque discounts referencia products.
+create table if not exists discounts (
+  id          uuid primary key default gen_random_uuid(),
+  product_id  uuid not null references products(id) on delete cascade,
+  type        discount_type not null,
+  value       numeric(10,2) not null,
+  valid_from  date,
+  valid_until date,
+  created_at  timestamptz not null default now()
+);
+create index if not exists idx_discounts_product on discounts (product_id);
+
+alter table products add column if not exists discount_id uuid references discounts(id) on delete set null;
 
 create table if not exists sales (
   id           uuid primary key default gen_random_uuid(),
@@ -323,6 +341,7 @@ alter table reservations   enable row level security;
 alter table profiles       enable row level security;
 alter table combos         enable row level security;
 alter table combo_items    enable row level security;
+alter table discounts      enable row level security;
 
 -- Catálogo: lectura pública
 drop policy if exists "catalogo lectura publica" on factions;
@@ -355,6 +374,10 @@ drop policy if exists "admin gestiona combo_items" on combo_items;
 create policy "admin gestiona combo_items" on combo_items for all using (is_admin()) with check (is_admin());
 drop policy if exists "catalogo lectura publica" on combo_items;
 create policy "catalogo lectura publica" on combo_items for select using (true);
+drop policy if exists "catalogo lectura publica" on discounts;
+create policy "catalogo lectura publica" on discounts for select using (true);
+drop policy if exists "admin gestiona discounts" on discounts;
+create policy "admin gestiona discounts" on discounts for all using (is_admin()) with check (is_admin());
 
 -- Costos: SOLO admin (ni lectura pública)
 drop policy if exists "admin gestiona costos" on product_costs;
@@ -595,3 +618,29 @@ drop policy if exists "admin gestiona combo_items" on combo_items;
 create policy "admin gestiona combo_items" on combo_items for all using (is_admin()) with check (is_admin());
 drop policy if exists "catalogo lectura publica" on combo_items;
 create policy "catalogo lectura publica" on combo_items for select using (true);
+
+-- =============================================================================
+-- MIGRACIÓN 2026-07-05: descuentos de productos (con historial)
+-- =============================================================================
+do $$ begin
+  create type discount_type as enum ('percentage', 'fixed');
+exception when duplicate_object then null; end $$;
+
+create table if not exists discounts (
+  id          uuid primary key default gen_random_uuid(),
+  product_id  uuid not null references products(id) on delete cascade,
+  type        discount_type not null,
+  value       numeric(10,2) not null,
+  valid_from  date,
+  valid_until date,
+  created_at  timestamptz not null default now()
+);
+create index if not exists idx_discounts_product on discounts (product_id);
+
+alter table products add column if not exists discount_id uuid references discounts(id) on delete set null;
+
+alter table discounts enable row level security;
+drop policy if exists "catalogo lectura publica" on discounts;
+create policy "catalogo lectura publica" on discounts for select using (true);
+drop policy if exists "admin gestiona discounts" on discounts;
+create policy "admin gestiona discounts" on discounts for all using (is_admin()) with check (is_admin());

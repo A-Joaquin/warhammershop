@@ -24,6 +24,7 @@ import {
 import type {
   Combo,
   Product,
+  ProductDiscount,
   Reservation,
   ReservationStatus,
   Sale,
@@ -114,6 +115,10 @@ interface AdminStoreValue extends StoreState {
   hideSale: (id: string) => Promise<void>;
   createCombo: (input: ComboInput) => Promise<void>;
   deleteCombo: (id: string) => Promise<void>;
+  setProductDiscount: (
+    id: string,
+    discount: { type: "percentage" | "fixed"; value: number; validFrom?: string; validUntil?: string } | null
+  ) => Promise<void>;
   setReservationStatus: (id: string, status: ReservationStatus) => Promise<void>;
   deleteReservation: (id: string) => Promise<void>;
   reload: () => Promise<void>;
@@ -155,6 +160,15 @@ interface DbProductRow {
   category2: string | null;
   product_costs: DbCost | DbCost[] | null;
   product_images: DbImage[] | null;
+  discount: DbDiscount | null;
+}
+interface DbDiscount {
+  id: string;
+  type: "percentage" | "fixed";
+  value: number | string;
+  valid_from: string | null;
+  valid_until: string | null;
+  created_at: string;
 }
 interface DbSaleRow {
   id: string;
@@ -231,6 +245,19 @@ function mapProduct(r: DbProductRow): Product {
     purchasePrice: c ? Number(c.purchase_price) : undefined,
     purchasePriceUsd: c ? num(c.purchase_price_usd) : undefined,
     taxRate: c ? Number(c.tax_rate) : undefined,
+    discount: mapDiscount(r.discount),
+  };
+}
+
+function mapDiscount(d: DbDiscount | null): ProductDiscount | undefined {
+  if (!d) return undefined;
+  return {
+    id: d.id,
+    type: d.type,
+    value: Number(d.value),
+    validFrom: d.valid_from ?? undefined,
+    validUntil: d.valid_until ?? undefined,
+    createdAt: d.created_at,
   };
 }
 
@@ -315,7 +342,7 @@ function sameMonth(iso: string, ref: Date) {
 }
 
 const SELECT_PRODUCT =
-  "*, product_costs(purchase_price,purchase_price_usd,tax_rate), product_images(url,kind,alt_text,sort_order)";
+  "*, product_costs(purchase_price,purchase_price_usd,tax_rate), product_images(url,kind,alt_text,sort_order), discount:discounts!products_discount_id_fkey(id,type,value,valid_from,valid_until,created_at)";
 
 export function AdminStoreProvider({ children }: { children: React.ReactNode }) {
   const sb = getSupabaseBrowser();
@@ -553,6 +580,36 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     [sb, reload]
   );
 
+  const setProductDiscount = useCallback<AdminStoreValue["setProductDiscount"]>(
+    async (id, discount) => {
+      if (!discount) {
+        const { error } = await sb.from("products").update({ discount_id: null }).eq("id", id);
+        if (error) console.error("setProductDiscount:", error.message);
+        await reload();
+        return;
+      }
+      const { data, error: insertError } = await sb
+        .from("discounts")
+        .insert({
+          product_id: id,
+          type: discount.type,
+          value: discount.value,
+          valid_from: discount.validFrom || null,
+          valid_until: discount.validUntil || null,
+        })
+        .select("id")
+        .single<{ id: string }>();
+      if (insertError || !data) {
+        console.error("setProductDiscount insert:", insertError?.message);
+        return;
+      }
+      const { error } = await sb.from("products").update({ discount_id: data.id }).eq("id", id);
+      if (error) console.error("setProductDiscount link:", error.message);
+      await reload();
+    },
+    [sb, reload]
+  );
+
   const setReservationStatus = useCallback<AdminStoreValue["setReservationStatus"]>(
     async (id, status) => {
       const { error } = await sb.from("reservations").update({ status }).eq("id", id);
@@ -599,6 +656,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       hideSale,
       createCombo,
       deleteCombo,
+      setProductDiscount,
       setReservationStatus,
       deleteReservation,
       reload,
@@ -615,6 +673,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       hideSale,
       createCombo,
       deleteCombo,
+      setProductDiscount,
       setReservationStatus,
       deleteReservation,
       reload,
