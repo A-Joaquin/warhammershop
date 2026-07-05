@@ -69,6 +69,23 @@ export interface Sale {
   category?: string; // categoría principal (snapshot, para estadísticas)
   category2?: string; // 2ª categoría asignada en la venta
   buyerNote?: string;
+  hidden: boolean; // oculta del listado admin sin borrar el registro
+}
+
+export interface ComboItem {
+  productId: string;
+  quantity: number;
+}
+
+export interface Combo {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  imageUrl: string | null;
+  price: number;
+  currency: string;
+  items: ComboItem[];
 }
 
 /** Costo total de una pieza en BOB: compra + impuesto (%). */

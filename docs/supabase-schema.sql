@@ -105,6 +105,27 @@ create table if not exists product_images (
   sort_order int not null default 0
 );
 
+create table if not exists combos (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  slug        text unique,
+  description text,
+  image_url   text,
+  price       numeric(10,2) not null,
+  currency    text not null default 'BOB',
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists combo_items (
+  id         uuid primary key default gen_random_uuid(),
+  combo_id   uuid not null references combos(id) on delete cascade,
+  product_id uuid not null references products(id) on delete restrict, -- evita romper combos al borrar un producto
+  quantity   int not null default 1,
+  sort_order int not null default 0
+);
+create index if not exists idx_combo_items_combo on combo_items (combo_id);
+create index if not exists idx_combo_items_product on combo_items (product_id);
+
 create table if not exists sales (
   id           uuid primary key default gen_random_uuid(),
   product_id   uuid references products(id) on delete set null,  -- conserva historial
@@ -119,7 +140,8 @@ create table if not exists sales (
   category     text,                  -- snapshot para estadísticas
   category2    text,
   buyer_note   text,
-  sold_at      timestamptz not null default now()
+  sold_at      timestamptz not null default now(),
+  hidden       boolean not null default false  -- ocultar del listado admin sin borrar el registro
 );
 
 create table if not exists reservations (
@@ -299,6 +321,8 @@ alter table product_images enable row level security;
 alter table sales          enable row level security;
 alter table reservations   enable row level security;
 alter table profiles       enable row level security;
+alter table combos         enable row level security;
+alter table combo_items    enable row level security;
 
 -- Catálogo: lectura pública
 drop policy if exists "catalogo lectura publica" on factions;
@@ -323,6 +347,12 @@ drop policy if exists "admin escribe products"   on products;
 create policy "admin escribe products"   on products       for all using (is_admin()) with check (is_admin());
 drop policy if exists "admin escribe imagenes"   on product_images;
 create policy "admin escribe imagenes"   on product_images for all using (is_admin()) with check (is_admin());
+drop policy if exists "catalogo lectura publica" on combos;
+create policy "catalogo lectura publica" on combos for select using (true);
+drop policy if exists "admin escribe combos" on combos;
+create policy "admin escribe combos" on combos for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin gestiona combo_items" on combo_items;
+create policy "admin gestiona combo_items" on combo_items for all using (is_admin()) with check (is_admin());
 
 -- Costos: SOLO admin (ni lectura pública)
 drop policy if exists "admin gestiona costos" on product_costs;
@@ -522,3 +552,42 @@ where not exists (select 1 from reservations);
 -- Fuera del SQL (panel de Supabase): Auth → Google/Email, subir imágenes a
 -- Storage, y en el front .env.local con NEXT_PUBLIC_SUPABASE_URL / ANON_KEY.
 -- =============================================================================
+
+-- =============================================================================
+-- MIGRACIÓN 2026-07-04: ocultar ventas del panel admin sin borrarlas (soft delete)
+-- =============================================================================
+alter table sales add column if not exists hidden boolean not null default false;
+
+-- =============================================================================
+-- MIGRACIÓN 2026-07-04 (b): combos de productos (lado admin)
+-- =============================================================================
+create table if not exists combos (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  slug        text unique,
+  description text,
+  image_url   text,
+  price       numeric(10,2) not null,
+  currency    text not null default 'BOB',
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists combo_items (
+  id         uuid primary key default gen_random_uuid(),
+  combo_id   uuid not null references combos(id) on delete cascade,
+  product_id uuid not null references products(id) on delete restrict,
+  quantity   int not null default 1,
+  sort_order int not null default 0
+);
+create index if not exists idx_combo_items_combo on combo_items (combo_id);
+create index if not exists idx_combo_items_product on combo_items (product_id);
+
+alter table combos      enable row level security;
+alter table combo_items enable row level security;
+
+drop policy if exists "catalogo lectura publica" on combos;
+create policy "catalogo lectura publica" on combos for select using (true);
+drop policy if exists "admin escribe combos" on combos;
+create policy "admin escribe combos" on combos for all using (is_admin()) with check (is_admin());
+drop policy if exists "admin gestiona combo_items" on combo_items;
+create policy "admin gestiona combo_items" on combo_items for all using (is_admin()) with check (is_admin());

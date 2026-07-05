@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Image from "next/image";
 import { Plus, Pencil, Trash2, BadgeDollarSign, Search } from "lucide-react";
 import type { Product, ProductStatus } from "@/lib/types";
-import { useAdminStore, type ProductInput } from "@/lib/contexts/admin-store";
+import { useAdminStore, type ProductInput, type ComboInput } from "@/lib/contexts/admin-store";
 import { factionName, FACTIONS } from "@/lib/data/factions";
 import { formatPrice, cn } from "@/lib/utils";
 import { PageHeader, Panel } from "@/components/admin/admin-ui";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/admin/modal";
 import { ProductForm } from "@/components/admin/product-form";
 import { MarkSoldForm } from "@/components/admin/mark-sold-form";
+import { ComboForm } from "@/components/admin/combo-form";
 
 const STATUS_OPTIONS: { value: "" | ProductStatus; label: string }[] = [
   { value: "", label: "Todos los estados" },
@@ -27,6 +28,7 @@ type Dialog =
   | { type: "create" }
   | { type: "edit"; product: Product }
   | { type: "sold"; product: Product }
+  | { type: "create-combo" }
   | null;
 
 export default function AdminProductsPage() {
@@ -34,10 +36,13 @@ export default function AdminProductsPage() {
     products,
     categories,
     factions,
+    combos,
     createProduct,
     updateProduct,
     deleteProduct,
     markSold,
+    createCombo,
+    deleteCombo,
   } = useAdminStore();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"" | ProductStatus>("");
@@ -76,6 +81,13 @@ export default function AdminProductsPage() {
     if (window.confirm(`¿Eliminar "${p.name}"? Esta acción no se puede deshacer.`))
       deleteProduct(p.id);
   };
+  const onCreateCombo = (input: ComboInput) => {
+    createCombo(input);
+    setDialog(null);
+  };
+  const onDeleteCombo = (name: string, id: string) => {
+    if (window.confirm(`¿Eliminar el combo "${name}"?`)) deleteCombo(id);
+  };
 
   return (
     <div>
@@ -83,9 +95,18 @@ export default function AdminProductsPage() {
         title="Productos"
         subtitle={`${products.length} piezas en inventario`}
         action={
-          <Button onClick={() => setDialog({ type: "create" })}>
-            <Plus className="h-4 w-4" /> Nuevo producto
-          </Button>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setDialog({ type: "create-combo" })}
+              className="inline-flex items-center gap-2 border border-char px-5 py-3 font-display text-sm font-semibold uppercase tracking-[0.12em] text-bone transition-colors hover:border-ember hover:text-ember"
+            >
+              <Plus className="h-4 w-4" /> Nuevo combo
+            </button>
+            <Button onClick={() => setDialog({ type: "create" })}>
+              <Plus className="h-4 w-4" /> Nuevo producto
+            </Button>
+          </div>
         }
       />
 
@@ -206,6 +227,42 @@ export default function AdminProductsPage() {
         )}
       </Panel>
 
+      {/* Combos */}
+      {combos.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 font-display text-sm font-bold uppercase tracking-[0.14em] text-bone/70">
+            Combos ({combos.length})
+          </h2>
+          <Panel className="overflow-hidden">
+            <ul className="divide-y divide-char/60">
+              {combos.map((c) => (
+                <li key={c.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="relative h-11 w-11 shrink-0 overflow-hidden border border-char bg-gradient-to-b from-[#f4f1ea] to-[#cdc7ba]">
+                    {c.imageUrl && (
+                      <Image src={c.imageUrl} alt="" fill sizes="44px" className="object-contain p-1" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-display text-sm uppercase tracking-wide text-bone">
+                      {c.name}
+                    </p>
+                    <p className="font-mono text-[10px] tracking-[0.1em] text-bone/35">
+                      {c.items.length} productos
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-display text-sm font-bold text-bone">
+                    {formatPrice(c.price, c.currency)}
+                  </span>
+                  <IconBtn title="Eliminar" onClick={() => onDeleteCombo(c.name, c.id)} danger>
+                    <Trash2 className="h-4 w-4" />
+                  </IconBtn>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        </div>
+      )}
+
       {/* Diálogos */}
       <Modal
         open={dialog?.type === "create"}
@@ -251,6 +308,20 @@ export default function AdminProductsPage() {
             onCancel={() => setDialog(null)}
           />
         )}
+      </Modal>
+
+      <Modal
+        open={dialog?.type === "create-combo"}
+        onClose={() => setDialog(null)}
+        title="Nuevo combo"
+        size="lg"
+      >
+        <ComboForm
+          products={products}
+          factions={factions}
+          onSubmit={onCreateCombo}
+          onCancel={() => setDialog(null)}
+        />
       </Modal>
     </div>
   );

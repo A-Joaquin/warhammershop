@@ -22,6 +22,7 @@ import {
   useState,
 } from "react";
 import type {
+  Combo,
   Product,
   Reservation,
   ReservationStatus,
@@ -45,6 +46,7 @@ interface StoreState {
   reservations: Reservation[];
   categories: string[];
   factions: FactionOption[];
+  combos: Combo[];
 }
 
 export interface ProductInput {
@@ -70,6 +72,16 @@ export interface ProductInput {
   purchasePrice?: number; // costo en BOB (sin impuesto)
   purchasePriceUsd?: number; // costo en USD (par de monedas)
   taxRate?: number;
+}
+
+export interface ComboInput {
+  name: string;
+  slug: string;
+  description: string;
+  price: number;
+  currency: string;
+  imageUrl: string | null;
+  items: { productId: string; quantity: number }[];
 }
 
 export interface MarkSoldInput {
@@ -99,6 +111,9 @@ interface AdminStoreValue extends StoreState {
   updateProduct: (id: string, input: ProductInput) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   markSold: (productId: string, input: MarkSoldInput) => Promise<void>;
+  hideSale: (id: string) => Promise<void>;
+  createCombo: (input: ComboInput) => Promise<void>;
+  deleteCombo: (id: string) => Promise<void>;
   setReservationStatus: (id: string, status: ReservationStatus) => Promise<void>;
   deleteReservation: (id: string) => Promise<void>;
   reload: () => Promise<void>;
@@ -156,6 +171,21 @@ interface DbSaleRow {
   category2: string | null;
   buyer_note: string | null;
   sold_at: string;
+  hidden: boolean;
+}
+interface DbComboItemRow {
+  product_id: string;
+  quantity: number;
+}
+interface DbComboRow {
+  id: string;
+  name: string;
+  slug: string | null;
+  description: string | null;
+  image_url: string | null;
+  price: number | string;
+  currency: string;
+  combo_items: DbComboItemRow[] | null;
 }
 interface DbReservationRow {
   id: string;
@@ -204,6 +234,22 @@ function mapProduct(r: DbProductRow): Product {
   };
 }
 
+function mapCombo(r: DbComboRow): Combo {
+  return {
+    id: r.id,
+    name: r.name,
+    slug: r.slug ?? "",
+    description: r.description ?? "",
+    imageUrl: r.image_url,
+    price: Number(r.price),
+    currency: r.currency,
+    items: (r.combo_items ?? []).map((i) => ({
+      productId: i.product_id,
+      quantity: i.quantity,
+    })),
+  };
+}
+
 function mapSale(r: DbSaleRow): Sale {
   return {
     id: r.id,
@@ -220,6 +266,7 @@ function mapSale(r: DbSaleRow): Sale {
     category: r.category ?? undefined,
     category2: r.category2 ?? undefined,
     buyerNote: r.buyer_note ?? undefined,
+    hidden: r.hidden,
   };
 }
 
@@ -279,28 +326,32 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     reservations: [],
     categories: [],
     factions: [],
+    combos: [],
   });
   const [ready, setReady] = useState(false);
 
   const reload = useCallback(async () => {
-    const [p, s, r, c, f] = await Promise.all([
+    const [p, s, r, c, f, cb] = await Promise.all([
       sb.from("products").select(SELECT_PRODUCT).order("created_at", { ascending: false }),
-      sb.from("sales").select("*").order("sold_at", { ascending: false }),
+      sb.from("sales").select("*").eq("hidden", false).order("sold_at", { ascending: false }),
       sb.from("reservations").select("*").order("created_at", { ascending: false }),
       sb.from("categories").select("name").order("name", { ascending: true }),
       sb.from("factions").select("slug,name,accent,logo").order("name", { ascending: true }),
+      sb.from("combos").select("*, combo_items(product_id, quantity)").order("created_at", { ascending: false }),
     ]);
     if (p.error) console.error("load products:", p.error.message);
     if (s.error) console.error("load sales:", s.error.message);
     if (r.error) console.error("load reservations:", r.error.message);
     if (c.error) console.error("load categories:", c.error.message);
     if (f.error) console.error("load factions:", f.error.message);
+    if (cb.error) console.error("load combos:", cb.error.message);
     setState({
       products: ((p.data ?? []) as unknown as DbProductRow[]).map(mapProduct),
       sales: ((s.data ?? []) as unknown as DbSaleRow[]).map(mapSale),
       reservations: ((r.data ?? []) as unknown as DbReservationRow[]).map(mapReservation),
       categories: ((c.data ?? []) as unknown as { name: string }[]).map((x) => x.name),
       factions: ((f.data ?? []) as unknown as FactionOption[]),
+      combos: ((cb.data ?? []) as unknown as DbComboRow[]).map(mapCombo),
     });
     setReady(true);
   }, [sb]);
@@ -450,6 +501,58 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     [sb, ensureCategories, reload]
   );
 
+  const hideSale = useCallback<AdminStoreValue["hideSale"]>(
+    async (id) => {
+      const { error } = await sb.from("sales").update({ hidden: true }).eq("id", id);
+      if (error) console.error("hideSale:", error.message);
+      await reload();
+    },
+    [sb, reload]
+  );
+
+  const createCombo = useCallback<AdminStoreValue["createCombo"]>(
+    async (input) => {
+      const { data, error } = await sb
+        .from("combos")
+        .insert({
+          name: input.name,
+          slug: input.slug || null,
+          description: input.description || null,
+          image_url: input.imageUrl,
+          price: input.price,
+          currency: input.currency,
+        })
+        .select("id")
+        .single<{ id: string }>();
+      if (error || !data) {
+        console.error("createCombo:", error?.message);
+        return;
+      }
+      if (input.items.length) {
+        const { error: itemsError } = await sb.from("combo_items").insert(
+          input.items.map((it, idx) => ({
+            combo_id: data.id,
+            product_id: it.productId,
+            quantity: it.quantity,
+            sort_order: idx,
+          }))
+        );
+        if (itemsError) console.error("createCombo items:", itemsError.message);
+      }
+      await reload();
+    },
+    [sb, reload]
+  );
+
+  const deleteCombo = useCallback<AdminStoreValue["deleteCombo"]>(
+    async (id) => {
+      const { error } = await sb.from("combos").delete().eq("id", id);
+      if (error) console.error("deleteCombo:", error.message);
+      await reload();
+    },
+    [sb, reload]
+  );
+
   const setReservationStatus = useCallback<AdminStoreValue["setReservationStatus"]>(
     async (id, status) => {
       const { error } = await sb.from("reservations").update({ status }).eq("id", id);
@@ -493,6 +596,9 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       updateProduct,
       deleteProduct,
       markSold,
+      hideSale,
+      createCombo,
+      deleteCombo,
       setReservationStatus,
       deleteReservation,
       reload,
@@ -506,6 +612,9 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       updateProduct,
       deleteProduct,
       markSold,
+      hideSale,
+      createCombo,
+      deleteCombo,
       setReservationStatus,
       deleteReservation,
       reload,

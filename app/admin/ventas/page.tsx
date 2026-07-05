@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Receipt, Search } from "lucide-react";
+import { Plus, Receipt, Search, Trash2 } from "lucide-react";
 import type { Product } from "@/lib/types";
 import { useAdminStore } from "@/lib/contexts/admin-store";
 import { factionName } from "@/lib/data/factions";
@@ -17,7 +17,7 @@ import { Modal } from "@/components/admin/modal";
 import { MarkSoldForm } from "@/components/admin/mark-sold-form";
 
 export default function AdminSalesPage() {
-  const { sales, products, categories, factions, markSold } = useAdminStore();
+  const { sales, products, categories, factions, markSold, hideSale } = useAdminStore();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [registering, setRegistering] = useState(false);
@@ -110,6 +110,7 @@ export default function AdminSalesPage() {
                   <th className="px-4 py-3 font-normal">Canal</th>
                   <th className="px-4 py-3 font-normal">Nota</th>
                   <th className="px-4 py-3 text-right font-normal">Precio</th>
+                  <th className="px-4 py-3 text-right font-normal">&nbsp;</th>
                 </tr>
               </thead>
               <tbody>
@@ -144,6 +145,19 @@ export default function AdminSalesPage() {
                     </td>
                     <td className="px-4 py-3 text-right font-display text-sm font-bold text-bone">
                       {formatPrice(s.soldPrice, s.currency)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm("¿Ocultar esta venta del listado?"))
+                            hideSale(s.id);
+                        }}
+                        aria-label="Ocultar venta"
+                        className="inline-flex h-9 w-9 items-center justify-center border border-char text-bone/50 transition-colors hover:border-red-400 hover:text-red-400"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}
