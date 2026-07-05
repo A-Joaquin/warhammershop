@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { Search, SlidersHorizontal, X, Rocket } from "lucide-react";
-import type { Product, ProductStatus } from "@/lib/types";
+import type { Combo, Product, ProductStatus } from "@/lib/types";
 import { factionName, factionAccent } from "@/lib/data/factions";
 import { legionForSlug } from "@/lib/data/legions";
 import { cn } from "@/lib/utils";
 import { ProductCard } from "@/components/catalog/product-card";
+import { ComboCard } from "@/components/catalog/combo-card";
 import { Input } from "@/components/ui/input";
 
 type SortKey = "novedad" | "precio-asc" | "precio-desc" | "nombre";
@@ -21,11 +22,13 @@ const STATUS_FILTERS: { value: ProductStatus; label: string }[] = [
 
 export function Catalog({
   products,
+  combos = [],
   factionLogos = {},
   initialFaction = "",
   initialCategory = "",
 }: {
   products: Product[];
+  combos?: Combo[];
   factionLogos?: Record<string, string>;
   initialFaction?: string;
   initialCategory?: string;
@@ -37,14 +40,18 @@ export function Catalog({
   const [launch, setLaunch] = useState(""); // id del lanzamiento (coming_soon) elegido
   const [sort, setSort] = useState<SortKey>("novedad");
   const [mobileFilters, setMobileFilters] = useState(false);
+  const [viewCombos, setViewCombos] = useState(false);
 
-  const toggleStatus = (s: ProductStatus) =>
+  const toggleStatus = (s: ProductStatus) => {
+    setViewCombos(false);
     setStatuses((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
     );
+  };
 
   // Al cambiar de facción, el lanzamiento elegido podría no pertenecerle: lo limpiamos.
   const selectFaction = (slug: string) => {
+    setViewCombos(false);
     setFaction(slug);
     setLaunch("");
   };
@@ -125,6 +132,11 @@ export function Catalog({
     return list;
   }, [products, faction, category, statuses, launch, query, sort]);
 
+  const filteredCombos = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return combos.filter((c) => !q || c.name.toLowerCase().includes(q));
+  }, [combos, query]);
+
   const hasActiveFilters =
     faction || category || statuses.length > 0 || launch || query;
 
@@ -145,6 +157,7 @@ export function Catalog({
     setStatuses([]);
     setLaunch("");
     setQuery("");
+    setViewCombos(false);
   };
 
   const Filters = (
@@ -159,13 +172,26 @@ export function Catalog({
             onClick={() => selectFaction("")}
             className={cn(
               "flex items-center justify-between px-3 py-2 text-left font-display text-sm uppercase tracking-wide transition-colors",
-              faction === ""
+              faction === "" && !viewCombos
                 ? "bg-ember/10 text-ember"
                 : "text-bone/60 hover:text-bone"
             )}
           >
             Todas
           </button>
+          {combos.length > 0 && (
+            <button
+              onClick={() => setViewCombos(true)}
+              className={cn(
+                "flex items-center justify-between px-3 py-2 text-left font-display text-sm uppercase tracking-wide transition-colors",
+                viewCombos
+                  ? "bg-ember/10 text-ember"
+                  : "text-bone/60 hover:text-bone"
+              )}
+            >
+              Combos
+            </button>
+          )}
           {factionOptions.map((f) => {
             const logo = logoFor(f.slug);
             return (
@@ -238,7 +264,10 @@ export function Catalog({
               {launchOptions.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => setLaunch(launch === p.id ? "" : p.id)}
+                  onClick={() => {
+                    setViewCombos(false);
+                    setLaunch(launch === p.id ? "" : p.id);
+                  }}
                   className={cn(
                     "flex items-center gap-2 px-3 py-2 text-left font-display text-sm uppercase tracking-wide transition-colors",
                     launch === p.id
@@ -265,7 +294,10 @@ export function Catalog({
             {categoryOptions.map((c) => (
               <button
                 key={c}
-                onClick={() => setCategory(category === c ? "" : c)}
+                onClick={() => {
+                  setViewCombos(false);
+                  setCategory(category === c ? "" : c);
+                }}
                 className={cn(
                   "border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
                   category === c
@@ -361,8 +393,9 @@ export function Catalog({
 
           <div className="mb-5 flex items-center justify-between">
             <p className="font-mono text-[11px] tracking-[0.16em] uppercase text-bone/40">
-              {filtered.length}{" "}
-              {filtered.length === 1 ? "pieza" : "piezas"}
+              {viewCombos
+                ? `${filteredCombos.length} ${filteredCombos.length === 1 ? "combo" : "combos"}`
+                : `${filtered.length} ${filtered.length === 1 ? "pieza" : "piezas"}`}
             </p>
             {hasActiveFilters && (
               <button
@@ -374,21 +407,55 @@ export function Catalog({
             )}
           </div>
 
-          {filtered.length === 0 ? (
-            <div className="border border-dashed border-char py-24 text-center">
-              <p className="font-display text-xl uppercase text-bone/60">
-                Sin resultados
-              </p>
-              <p className="mt-2 text-sm text-bone/40">
-                Ajusta los filtros o limpia la búsqueda.
-              </p>
-            </div>
+          {viewCombos ? (
+            filteredCombos.length === 0 ? (
+              <div className="border border-dashed border-char py-24 text-center">
+                <p className="font-display text-xl uppercase text-bone/60">
+                  Sin combos
+                </p>
+                <p className="mt-2 text-sm text-bone/40">
+                  Ajusta la búsqueda.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                {filteredCombos.map((c) => (
+                  <ComboCard key={c.id} combo={c} />
+                ))}
+              </div>
+            )
           ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {filtered.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
+            <>
+              {filtered.length === 0 ? (
+                <div className="border border-dashed border-char py-24 text-center">
+                  <p className="font-display text-xl uppercase text-bone/60">
+                    Sin resultados
+                  </p>
+                  <p className="mt-2 text-sm text-bone/40">
+                    Ajusta los filtros o limpia la búsqueda.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                  {filtered.map((p) => (
+                    <ProductCard key={p.id} product={p} />
+                  ))}
+                </div>
+              )}
+
+              {faction === "" && filteredCombos.length > 0 && (
+                <section className="mt-14 border-t border-char pt-10">
+                  <h2 className="font-display text-xl font-bold uppercase tracking-tight text-bone">
+                    Combos
+                  </h2>
+                  <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                    {filteredCombos.map((c) => (
+                      <ComboCard key={c.id} combo={c} />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
           )}
         </div>
       </div>

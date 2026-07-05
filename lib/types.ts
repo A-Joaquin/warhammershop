@@ -75,6 +75,15 @@ export interface Sale {
 export interface ComboItem {
   productId: string;
   quantity: number;
+  /** Preview del producto (solo lo carga el catálogo público, no el admin). */
+  product?: {
+    id: string;
+    name: string;
+    slug: string;
+    price: number;
+    currency: string;
+    image?: string;
+  };
 }
 
 export interface Combo {

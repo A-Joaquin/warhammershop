@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { PageIntro } from "@/components/section";
 import { Catalog } from "@/components/catalog/catalog";
 import { SoldCollage } from "@/components/catalog/sold-collage";
-import { getAllProducts, getFactions } from "@/lib/catalog";
+import { getAllProducts, getCombos, getFactions } from "@/lib/catalog";
 
 export const metadata: Metadata = {
   title: "Catálogo",
@@ -19,9 +19,10 @@ export default async function TiendaPage({
   searchParams: Promise<{ faction?: string; category?: string }>;
 }) {
   const { faction, category } = await searchParams;
-  const [products, factions] = await Promise.all([
+  const [products, factions, combos] = await Promise.all([
     getAllProducts(),
     getFactions(),
+    getCombos(),
   ]);
 
   // Mapa slug → logo para que el catálogo muestre el ícono de cada facción.
@@ -39,6 +40,7 @@ export default async function TiendaPage({
       />
       <Catalog
         products={products}
+        combos={combos}
         factionLogos={factionLogos}
         initialFaction={faction ?? ""}
         initialCategory={category ?? ""}

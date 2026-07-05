@@ -353,6 +353,8 @@ drop policy if exists "admin escribe combos" on combos;
 create policy "admin escribe combos" on combos for all using (is_admin()) with check (is_admin());
 drop policy if exists "admin gestiona combo_items" on combo_items;
 create policy "admin gestiona combo_items" on combo_items for all using (is_admin()) with check (is_admin());
+drop policy if exists "catalogo lectura publica" on combo_items;
+create policy "catalogo lectura publica" on combo_items for select using (true);
 
 -- Costos: SOLO admin (ni lectura pública)
 drop policy if exists "admin gestiona costos" on product_costs;
@@ -591,3 +593,5 @@ drop policy if exists "admin escribe combos" on combos;
 create policy "admin escribe combos" on combos for all using (is_admin()) with check (is_admin());
 drop policy if exists "admin gestiona combo_items" on combo_items;
 create policy "admin gestiona combo_items" on combo_items for all using (is_admin()) with check (is_admin());
+drop policy if exists "catalogo lectura publica" on combo_items;
+create policy "catalogo lectura publica" on combo_items for select using (true);
