@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 import type { Product } from "../types";
+import { discountedPrice } from "../types";
 
 const STORAGE_KEY = "arsenal-cart";
 
@@ -101,7 +102,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         name: product.name,
         sku: product.sku,
         faction: product.faction,
-        price: product.price,
+        price: discountedPrice(product),
         currency: product.currency,
         image: product.images[0]?.url ?? "",
         stockQty: product.stockQty,

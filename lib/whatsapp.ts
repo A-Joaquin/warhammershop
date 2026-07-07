@@ -1,6 +1,7 @@
 import { SITE } from "./config";
 import { formatPrice } from "./utils";
 import type { Combo, Product } from "./types";
+import { discountedPrice } from "./types";
 
 /** Construye un deep link wa.me con mensaje prellenado (brief §9). */
 export function waLink(text: string, phone: string = SITE.whatsapp) {
@@ -10,7 +11,7 @@ export function waLink(text: string, phone: string = SITE.whatsapp) {
 export function waProductLink(product: Product) {
   const url = `${SITE.url}/producto/${product.slug}`;
   const text = `Hola, me interesa "${product.name}" (${formatPrice(
-    product.price,
+    discountedPrice(product),
     product.currency
   )}). Enlace: ${url}. ¿Sigue disponible?`;
   return waLink(text);

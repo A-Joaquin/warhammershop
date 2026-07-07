@@ -2,9 +2,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowUpRight } from "lucide-react";
 import type { Product } from "@/lib/types";
+import { discountedPrice, isDiscountActive } from "@/lib/types";
 import { cn, formatPrice } from "@/lib/utils";
 import { factionName } from "@/lib/data/factions";
-import { StatusBadge, ConditionTag } from "@/components/catalog/status-badge";
+import { StatusBadge, ConditionTag, DiscountBadge } from "@/components/catalog/status-badge";
 import { CardAddButton } from "@/components/cart/card-add-button";
 
 export function ProductCard({
@@ -17,6 +18,8 @@ export function ProductCard({
   const cover = product.images[0];
   const isSold = product.status === "sold";
   const isAvailable = product.status === "available" && product.stockQty > 0;
+  const hasDiscount = isDiscountActive(product.discount);
+  const finalPrice = hasDiscount ? discountedPrice(product) : product.price;
 
   return (
     <Link
@@ -36,8 +39,11 @@ export function ProductCard({
             isSold && "opacity-60 grayscale"
           )}
         />
-        <div className="absolute left-3 top-3">
+        <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">
           <StatusBadge status={product.status} />
+          {hasDiscount && product.discount && (
+            <DiscountBadge discount={product.discount} price={product.price} currency={product.currency} />
+          )}
         </div>
         {isAvailable && (
           <div className="absolute right-3 top-3 opacity-0 transition-opacity duration-300 group-hover:opacity-100 focus-within:opacity-100">
@@ -70,8 +76,15 @@ export function ProductCard({
         </p>
 
         <div className="mt-auto flex items-end justify-between pt-4">
-          <span className="font-display text-xl font-bold text-bone">
-            {formatPrice(product.price, product.currency)}
+          <span className="flex items-baseline gap-2">
+            {hasDiscount && (
+              <span className="font-mono text-sm text-bone/40 line-through">
+                {formatPrice(product.price, product.currency)}
+              </span>
+            )}
+            <span className="font-display text-xl font-bold text-bone">
+              {formatPrice(finalPrice, product.currency)}
+            </span>
           </span>
           <span className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.16em] text-bone/50 transition-colors group-hover:text-ember">
             Ver

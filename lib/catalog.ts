@@ -12,8 +12,9 @@
 import type { Combo, ComboItem, Product } from "./types";
 import { createPublicClient } from "./supabase/server";
 
-// products + sus imágenes (join anidado de PostgREST)
-const SELECT = "*, product_images(url,kind,alt_text,sort_order)";
+// products + sus imágenes + su descuento vigente (join anidado de PostgREST)
+const SELECT =
+  "*, product_images(url,kind,alt_text,sort_order), discount:discounts!products_discount_id_fkey(id,type,value,valid_from,valid_until,created_at)";
 
 // combos + sus productos incluidos (join anidado de PostgREST)
 const COMBO_SELECT =
@@ -46,6 +47,15 @@ interface DbProduct {
   category: string | null;
   category2: string | null;
   product_images: DbImage[] | null;
+  discount: DbDiscount | null;
+}
+interface DbDiscount {
+  id: string;
+  type: "percentage" | "fixed";
+  value: number | string;
+  valid_from: string | null;
+  valid_until: string | null;
+  created_at: string;
 }
 
 /** Mapea una fila de Supabase (snake_case) al modelo `Product` del front. */
@@ -74,6 +84,16 @@ function mapProduct(r: DbProduct): Product {
     images,
     category: r.category ?? undefined,
     category2: r.category2 ?? undefined,
+    discount: r.discount
+      ? {
+          id: r.discount.id,
+          type: r.discount.type,
+          value: Number(r.discount.value),
+          validFrom: r.discount.valid_from ?? undefined,
+          validUntil: r.discount.valid_until ?? undefined,
+          createdAt: r.discount.created_at,
+        }
+      : undefined,
   };
 }
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, Package, Tag, Boxes } from "lucide-react";
 import { getProductBySlug, getAllProducts, getRelated } from "@/lib/catalog";
+import { discountedPrice, isDiscountActive } from "@/lib/types";
 import { factionName } from "@/lib/data/factions";
 import { formatPrice, formatDate } from "@/lib/utils";
 import { SITE } from "@/lib/config";
@@ -12,7 +13,7 @@ import { ProductCard } from "@/components/catalog/product-card";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { AddToCartButton } from "@/components/cart/add-to-cart-button";
 import { ProductClickTracker } from "@/components/catalog/product-click-tracker";
-import { StatusBadge, CONDITION_LABEL } from "@/components/catalog/status-badge";
+import { StatusBadge, DiscountBadge, CONDITION_LABEL } from "@/components/catalog/status-badge";
 import { Eyebrow } from "@/components/section";
 
 // ISR: las fichas se prerenderan y se refrescan cada minuto.
@@ -65,6 +66,8 @@ export default async function ProductPage({
   const related = await getRelated(product);
   const isComingSoon = product.status === "coming_soon";
   const isSold = product.status === "sold";
+  const hasDiscount = isDiscountActive(product.discount);
+  const finalPrice = hasDiscount ? discountedPrice(product) : product.price;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -76,7 +79,7 @@ export default async function ProductPage({
     brand: { "@type": "Brand", name: "Warhammer 40.000" },
     offers: {
       "@type": "Offer",
-      price: product.price,
+      price: finalPrice,
       priceCurrency: product.currency,
       availability: AVAILABILITY[product.status],
       url: `${SITE.url}/producto/${product.slug}`,
@@ -114,6 +117,9 @@ export default async function ProductPage({
             <div className="flex items-center gap-3">
               <Eyebrow>{factionName(product.faction)}</Eyebrow>
               <StatusBadge status={product.status} />
+              {hasDiscount && product.discount && (
+                <DiscountBadge discount={product.discount} price={product.price} currency={product.currency} />
+              )}
             </div>
 
             <h1 className="mt-3 font-display text-3xl font-bold uppercase leading-[0.98] tracking-tight text-bone md:text-5xl">
@@ -124,8 +130,13 @@ export default async function ProductPage({
             </p>
 
             <div className="mt-6 flex items-end gap-4">
+              {hasDiscount && (
+                <span className="pb-1 font-mono text-lg text-bone/40 line-through">
+                  {formatPrice(product.price, product.currency)}
+                </span>
+              )}
               <span className="font-display text-4xl font-bold text-bone">
-                {formatPrice(product.price, product.currency)}
+                {formatPrice(finalPrice, product.currency)}
               </span>
               {isComingSoon && product.releaseDate && (
                 <span className="pb-1 font-mono text-[11px] uppercase tracking-[0.16em] text-ember-2">

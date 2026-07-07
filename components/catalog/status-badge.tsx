@@ -1,5 +1,10 @@
 import { cn } from "@/lib/utils";
-import type { ProductStatus, ProductCondition } from "@/lib/types";
+import type { ProductStatus, ProductCondition, ProductDiscount } from "@/lib/types";
+import { discountAmount } from "@/lib/types";
+
+function currencySymbol(currency: string) {
+  return currency === "BOB" ? "Bs" : currency === "USD" ? "$" : "";
+}
 
 const STATUS_MAP: Record<
   ProductStatus,
@@ -51,6 +56,41 @@ export function StatusBadge({
     >
       <span className={cn("h-1.5 w-1.5 rounded-full", s.dot)} />
       {s.label}
+    </span>
+  );
+}
+
+export function DiscountBadge({
+  discount,
+  price,
+  currency,
+  className,
+}: {
+  discount: ProductDiscount;
+  price: number;
+  currency: string;
+  className?: string;
+}) {
+  const isPercentage = discount.type === "percentage";
+  const numberPart = (
+    isPercentage ? discount.value : discountAmount({ price, discount })
+  ).toLocaleString("es-BO", { maximumFractionDigits: 0 });
+  const unitPart = isPercentage ? "%" : currencySymbol(currency);
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-baseline gap-1 border border-red-500/40 bg-red-500/10 px-2.5 py-1",
+        className
+      )}
+    >
+      <span className="font-mono text-[10px] font-bold text-red-400">-</span>
+      <span className="font-display text-base font-bold leading-none text-red-400">
+        {numberPart}
+      </span>
+      <span className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-red-400">
+        {unitPart}
+      </span>
     </span>
   );
 }

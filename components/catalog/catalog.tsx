@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Image from "next/image";
 import { Search, SlidersHorizontal, X, Rocket } from "lucide-react";
 import type { Combo, Product, ProductStatus } from "@/lib/types";
+import { discountedPrice } from "@/lib/types";
 import { factionName, factionAccent } from "@/lib/data/factions";
 import { legionForSlug } from "@/lib/data/legions";
 import { cn } from "@/lib/utils";
@@ -120,9 +121,9 @@ export function Catalog({
     list = [...list].sort((a, b) => {
       switch (sort) {
         case "precio-asc":
-          return a.price - b.price;
+          return discountedPrice(a) - discountedPrice(b);
         case "precio-desc":
-          return b.price - a.price;
+          return discountedPrice(b) - discountedPrice(a);
         case "nombre":
           return a.name.localeCompare(b.name);
         default:
