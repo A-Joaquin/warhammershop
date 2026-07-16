@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LegionBadge } from "@/components/account/legion-badge";
 import { AuthPanel } from "@/components/account/auth-panel";
+import { MyPurchases } from "@/components/account/my-purchases";
 
 export default function CuentaPage() {
   const { ready, user, signOut, updateLegion, updateProfile } = useAccount();
@@ -105,6 +106,9 @@ function ProfileView({
           <LogOut className="h-4 w-4" /> Salir
         </button>
       </div>
+
+      {/* Mis compras (posventa: envío, confirmación, calificación) */}
+      <MyPurchases userId={user.id} />
 
       {/* Datos de contacto */}
       <ContactCard user={user} updateProfile={updateProfile} />

@@ -41,6 +41,29 @@ export interface FactionOption {
   logo?: string | null;
 }
 
+export interface CustomerOption {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  department: string;
+}
+
+/** Reseña vista por el admin (moderación) — incluye ocultas y el nombre del producto. */
+export interface AdminReview {
+  id: string;
+  saleId: string;
+  productId: string;
+  productName: string;
+  productSlug: string;
+  reviewerName: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+  hidden: boolean;
+  adminSeen: boolean;
+}
+
 interface StoreState {
   products: Product[];
   sales: Sale[];
@@ -48,6 +71,8 @@ interface StoreState {
   categories: string[];
   factions: FactionOption[];
   combos: Combo[];
+  customers: CustomerOption[];
+  reviews: AdminReview[];
 }
 
 export interface ProductInput {
@@ -91,6 +116,10 @@ export interface MarkSoldInput {
   /** 2ª categoría: se guarda en la venta y en el producto. */
   category2?: string;
   buyerNote?: string;
+  /** Cliente registrado vinculado a la venta (opcional). */
+  userId?: string;
+  /** Reseña aproximada cargada por el admin al momento de la venta (opcional). */
+  review?: { rating: number; comment?: string; reviewerName?: string };
 }
 
 export interface AdminStats {
@@ -102,6 +131,7 @@ export interface AdminStats {
   soldThisMonthAmount: number; // ingresos del mes
   soldThisMonthProfit: number; // ganancia del mes (ingresos - costo)
   pendingReservations: number;
+  lowReviewsUnseen: number; // reseñas ≤3★ que el admin aún no ha revisado
 }
 
 interface AdminStoreValue extends StoreState {
@@ -113,6 +143,15 @@ interface AdminStoreValue extends StoreState {
   deleteProduct: (id: string) => Promise<void>;
   markSold: (productId: string, input: MarkSoldInput) => Promise<void>;
   hideSale: (id: string) => Promise<void>;
+  markShipped: (saleId: string, input: { department?: string; note?: string }) => Promise<void>;
+  markDelivered: (saleId: string) => Promise<void>;
+  submitAdminReview: (
+    saleId: string,
+    input: { rating: number; comment?: string; reviewerName?: string }
+  ) => Promise<void>;
+  reviewedSaleIds: string[];
+  toggleReviewHidden: (reviewId: string, hidden: boolean) => Promise<void>;
+  markReviewsSeen: () => Promise<void>;
   createCombo: (input: ComboInput) => Promise<void>;
   deleteCombo: (id: string) => Promise<void>;
   setProductDiscount: (
@@ -186,6 +225,12 @@ interface DbSaleRow {
   buyer_note: string | null;
   sold_at: string;
   hidden: boolean;
+  user_id: string | null;
+  delivery_status: Sale["deliveryStatus"];
+  shipping_department: string | null;
+  shipping_note: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
 }
 interface DbComboItemRow {
   product_id: string;
@@ -200,6 +245,18 @@ interface DbComboRow {
   price: number | string;
   currency: string;
   combo_items: DbComboItemRow[] | null;
+}
+interface DbReviewRow {
+  id: string;
+  sale_id: string;
+  product_id: string;
+  reviewer_name: string | null;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  hidden: boolean;
+  admin_seen: boolean;
+  product: { name: string; slug: string } | { name: string; slug: string }[] | null;
 }
 interface DbReservationRow {
   id: string;
@@ -294,6 +351,29 @@ function mapSale(r: DbSaleRow): Sale {
     category2: r.category2 ?? undefined,
     buyerNote: r.buyer_note ?? undefined,
     hidden: r.hidden,
+    userId: r.user_id ?? undefined,
+    deliveryStatus: r.delivery_status,
+    shippingDepartment: r.shipping_department ?? undefined,
+    shippingNote: r.shipping_note ?? undefined,
+    shippedAt: r.shipped_at ?? undefined,
+    deliveredAt: r.delivered_at ?? undefined,
+  };
+}
+
+function mapReview(r: DbReviewRow): AdminReview {
+  const product = Array.isArray(r.product) ? r.product[0] : r.product;
+  return {
+    id: r.id,
+    saleId: r.sale_id,
+    productId: r.product_id,
+    productName: product?.name ?? "",
+    productSlug: product?.slug ?? "",
+    reviewerName: r.reviewer_name ?? "Cliente",
+    rating: r.rating,
+    comment: r.comment ?? undefined,
+    createdAt: r.created_at,
+    hidden: r.hidden,
+    adminSeen: r.admin_seen,
   };
 }
 
@@ -354,17 +434,24 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     categories: [],
     factions: [],
     combos: [],
+    customers: [],
+    reviews: [],
   });
   const [ready, setReady] = useState(false);
 
   const reload = useCallback(async () => {
-    const [p, s, r, c, f, cb] = await Promise.all([
+    const [p, s, r, c, f, cb, cu, rv] = await Promise.all([
       sb.from("products").select(SELECT_PRODUCT).order("created_at", { ascending: false }),
       sb.from("sales").select("*").eq("hidden", false).order("sold_at", { ascending: false }),
       sb.from("reservations").select("*").order("created_at", { ascending: false }),
       sb.from("categories").select("name").order("name", { ascending: true }),
       sb.from("factions").select("slug,name,accent,logo").order("name", { ascending: true }),
       sb.from("combos").select("*, combo_items(product_id, quantity)").order("created_at", { ascending: false }),
+      sb.from("profiles").select("id,name,email,phone,department").order("name", { ascending: true }),
+      sb
+        .from("product_reviews")
+        .select("*, product:products(name,slug)")
+        .order("created_at", { ascending: false }),
     ]);
     if (p.error) console.error("load products:", p.error.message);
     if (s.error) console.error("load sales:", s.error.message);
@@ -372,6 +459,8 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     if (c.error) console.error("load categories:", c.error.message);
     if (f.error) console.error("load factions:", f.error.message);
     if (cb.error) console.error("load combos:", cb.error.message);
+    if (cu.error) console.error("load customers:", cu.error.message);
+    if (rv.error) console.error("load reviews:", rv.error.message);
     setState({
       products: ((p.data ?? []) as unknown as DbProductRow[]).map(mapProduct),
       sales: ((s.data ?? []) as unknown as DbSaleRow[]).map(mapSale),
@@ -379,6 +468,20 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       categories: ((c.data ?? []) as unknown as { name: string }[]).map((x) => x.name),
       factions: ((f.data ?? []) as unknown as FactionOption[]),
       combos: ((cb.data ?? []) as unknown as DbComboRow[]).map(mapCombo),
+      customers: ((cu.data ?? []) as unknown as {
+        id: string;
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        department: string | null;
+      }[]).map((x) => ({
+        id: x.id,
+        name: x.name ?? x.email ?? "Cliente",
+        email: x.email ?? "",
+        phone: x.phone ?? "",
+        department: x.department ?? "",
+      })),
+      reviews: ((rv.data ?? []) as unknown as DbReviewRow[]).map(mapReview),
     });
     setReady(true);
   }, [sb]);
@@ -514,14 +617,25 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
 
   const markSold = useCallback<AdminStoreValue["markSold"]>(
     async (productId, input) => {
-      const { error } = await sb.rpc("mark_product_sold", {
+      const { data, error } = await sb.rpc("mark_product_sold", {
         p_product_id: productId,
         p_sold_price: input.soldPrice,
         p_channel: input.channel,
         p_category2: input.category2?.trim() || null,
         p_buyer_note: input.buyerNote || null,
+        p_user_id: input.userId ?? null,
       });
       if (error) console.error("markSold:", error.message);
+      const saleId = (data as unknown as { id: string } | null)?.id;
+      if (saleId && input.review) {
+        const { error: reviewError } = await sb.rpc("admin_submit_product_review", {
+          p_sale_id: saleId,
+          p_rating: input.review.rating,
+          p_comment: input.review.comment || null,
+          p_reviewer_name: input.review.reviewerName || null,
+        });
+        if (reviewError) console.error("markSold review:", reviewError.message);
+      }
       await ensureCategories(input.category2);
       await reload();
     },
@@ -536,6 +650,64 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     },
     [sb, reload]
   );
+
+  const markShipped = useCallback<AdminStoreValue["markShipped"]>(
+    async (saleId, input) => {
+      const { error } = await sb.rpc("mark_sale_shipped", {
+        p_sale_id: saleId,
+        p_shipping_department: input.department?.trim() || null,
+        p_shipping_note: input.note?.trim() || null,
+      });
+      if (error) console.error("markShipped:", error.message);
+      await reload();
+    },
+    [sb, reload]
+  );
+
+  const markDelivered = useCallback<AdminStoreValue["markDelivered"]>(
+    async (saleId) => {
+      const { error } = await sb
+        .from("sales")
+        .update({ delivery_status: "entregado", delivered_at: new Date().toISOString() })
+        .eq("id", saleId);
+      if (error) console.error("markDelivered:", error.message);
+      await reload();
+    },
+    [sb, reload]
+  );
+
+  const submitAdminReview = useCallback<AdminStoreValue["submitAdminReview"]>(
+    async (saleId, input) => {
+      const { error } = await sb.rpc("admin_submit_product_review", {
+        p_sale_id: saleId,
+        p_rating: input.rating,
+        p_comment: input.comment || null,
+        p_reviewer_name: input.reviewerName || null,
+      });
+      if (error) console.error("submitAdminReview:", error.message);
+      await reload();
+    },
+    [sb, reload]
+  );
+
+  const toggleReviewHidden = useCallback<AdminStoreValue["toggleReviewHidden"]>(
+    async (reviewId, hidden) => {
+      const { error } = await sb.from("product_reviews").update({ hidden }).eq("id", reviewId);
+      if (error) console.error("toggleReviewHidden:", error.message);
+      await reload();
+    },
+    [sb, reload]
+  );
+
+  const markReviewsSeen = useCallback<AdminStoreValue["markReviewsSeen"]>(async () => {
+    const { error } = await sb
+      .from("product_reviews")
+      .update({ admin_seen: true })
+      .lte("rating", 3)
+      .eq("admin_seen", false);
+    if (error) console.error("markReviewsSeen:", error.message);
+    await reload();
+  }, [sb, reload]);
 
   const createCombo = useCallback<AdminStoreValue["createCombo"]>(
     async (input) => {
@@ -640,8 +812,11 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       soldThisMonthAmount: monthSales.reduce((a, s) => a + s.soldPrice, 0),
       soldThisMonthProfit: monthSales.reduce((a, s) => a + (s.soldPrice - s.cost), 0),
       pendingReservations: state.reservations.filter((r) => r.status === "pendiente").length,
+      lowReviewsUnseen: state.reviews.filter((rv) => rv.rating <= 3 && !rv.adminSeen).length,
     };
   }, [state]);
+
+  const reviewedSaleIds = useMemo(() => state.reviews.map((rv) => rv.saleId), [state.reviews]);
 
   const value = useMemo<AdminStoreValue>(
     () => ({
@@ -654,6 +829,12 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       deleteProduct,
       markSold,
       hideSale,
+      markShipped,
+      markDelivered,
+      submitAdminReview,
+      reviewedSaleIds,
+      toggleReviewHidden,
+      markReviewsSeen,
       createCombo,
       deleteCombo,
       setProductDiscount,
@@ -671,6 +852,12 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       deleteProduct,
       markSold,
       hideSale,
+      markShipped,
+      markDelivered,
+      submitAdminReview,
+      reviewedSaleIds,
+      toggleReviewHidden,
+      markReviewsSeen,
       createCombo,
       deleteCombo,
       setProductDiscount,

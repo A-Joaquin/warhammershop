@@ -11,6 +11,7 @@ import {
   Rocket,
   BarChart3,
   BadgePercent,
+  Star,
   LogOut,
   ExternalLink,
   Menu,
@@ -30,6 +31,7 @@ const NAV = [
   { href: "/admin/estadisticas", label: "Estadísticas", icon: BarChart3 },
   { href: "/admin/reservas", label: "Reservas", icon: CalendarClock },
   { href: "/admin/lanzamientos", label: "Lanzamientos", icon: Rocket },
+  { href: "/admin/resenas", label: "Reseñas", icon: Star },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -137,7 +139,9 @@ function SidebarContent({
           const badge =
             item.href === "/admin/reservas" && stats.pendingReservations > 0
               ? stats.pendingReservations
-              : null;
+              : item.href === "/admin/resenas" && stats.lowReviewsUnseen > 0
+                ? stats.lowReviewsUnseen
+                : null;
           return (
             <Link
               key={item.href}

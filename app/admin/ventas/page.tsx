@@ -1,29 +1,50 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Receipt, Search, Trash2 } from "lucide-react";
-import type { Product } from "@/lib/types";
-import { useAdminStore } from "@/lib/contexts/admin-store";
+import { Plus, Receipt, Search, Trash2, Truck, PackageCheck, Star } from "lucide-react";
+import type { Product, Sale } from "@/lib/types";
+import { useAdminStore, type CustomerOption } from "@/lib/contexts/admin-store";
 import { factionName } from "@/lib/data/factions";
 import { formatPrice, formatDate, cn } from "@/lib/utils";
 import {
   PageHeader,
   Panel,
   SALE_CHANNEL_LABEL,
+  DeliveryStatusBadge,
 } from "@/components/admin/admin-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/admin/modal";
 import { MarkSoldForm } from "@/components/admin/mark-sold-form";
+import { ReviewFields } from "@/components/admin/review-fields";
 
 export default function AdminSalesPage() {
-  const { sales, products, categories, factions, markSold, hideSale } = useAdminStore();
+  const {
+    sales,
+    products,
+    categories,
+    factions,
+    customers,
+    reviewedSaleIds,
+    markSold,
+    hideSale,
+    markShipped,
+    markDelivered,
+    submitAdminReview,
+  } = useAdminStore();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [registering, setRegistering] = useState(false);
   const [picked, setPicked] = useState<Product | null>(null);
+  const [pickedCustomer, setPickedCustomer] = useState<CustomerOption | null | undefined>(
+    undefined
+  );
   const [pickQuery, setPickQuery] = useState("");
   const [pickFaction, setPickFaction] = useState("");
+  const [customerQuery, setCustomerQuery] = useState("");
+
+  const [shipSale, setShipSale] = useState<Sale | null>(null);
+  const [reviewSale, setReviewSale] = useState<Sale | null>(null);
 
   const sellable = useMemo(() => {
     const q = pickQuery.trim().toLowerCase();
@@ -34,6 +55,14 @@ export default function AdminSalesPage() {
       return true;
     });
   }, [products, pickQuery, pickFaction]);
+
+  const matchingCustomers = useMemo(() => {
+    const q = customerQuery.trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter((c) =>
+      `${c.name} ${c.email} ${c.phone}`.toLowerCase().includes(q)
+    );
+  }, [customers, customerQuery]);
 
   const filtered = useMemo(() => {
     return [...sales]
@@ -47,12 +76,16 @@ export default function AdminSalesPage() {
   }, [sales, from, to]);
 
   const total = filtered.reduce((a, s) => a + s.soldPrice, 0);
+  const customerName = (userId?: string) => customers.find((c) => c.id === userId)?.name;
+  const reviewed = new Set(reviewedSaleIds);
 
   const closeRegister = () => {
     setRegistering(false);
     setPicked(null);
+    setPickedCustomer(undefined);
     setPickQuery("");
     setPickFaction("");
+    setCustomerQuery("");
   };
 
   return (
@@ -102,13 +135,14 @@ export default function AdminSalesPage() {
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left">
+            <table className="w-full min-w-[880px] text-left">
               <thead>
                 <tr className="border-b border-char font-mono text-[10px] uppercase tracking-[0.16em] text-bone/40">
                   <th className="px-4 py-3 font-normal">Producto</th>
+                  <th className="px-4 py-3 font-normal">Cliente</th>
                   <th className="px-4 py-3 font-normal">Fecha</th>
                   <th className="px-4 py-3 font-normal">Canal</th>
-                  <th className="px-4 py-3 font-normal">Nota</th>
+                  <th className="px-4 py-3 font-normal">Envío</th>
                   <th className="px-4 py-3 text-right font-normal">Precio</th>
                   <th className="px-4 py-3 text-right font-normal">&nbsp;</th>
                 </tr>
@@ -131,6 +165,11 @@ export default function AdminSalesPage() {
                           .join("")}
                       </p>
                     </td>
+                    <td className="px-4 py-3 font-mono text-[11px] tracking-[0.06em] text-bone/60">
+                      {customerName(s.userId) ?? (
+                        <span className="text-bone/30">Sin cuenta</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-mono text-[11px] tracking-[0.08em] text-bone/60">
                       {formatDate(s.soldAt)}
                     </td>
@@ -140,8 +179,33 @@ export default function AdminSalesPage() {
                         {SALE_CHANNEL_LABEL[s.channel]}
                       </span>
                     </td>
-                    <td className="max-w-[220px] px-4 py-3 text-sm text-bone/45">
-                      <span className="line-clamp-1">{s.buyerNote ?? "—"}</span>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col items-start gap-1.5">
+                        <DeliveryStatusBadge status={s.deliveryStatus} />
+                        <div className="flex flex-wrap gap-2">
+                          {s.deliveryStatus === "pendiente" && (
+                            <RowAction
+                              icon={Truck}
+                              label="Marcar enviado"
+                              onClick={() => setShipSale(s)}
+                            />
+                          )}
+                          {s.deliveryStatus !== "entregado" && (
+                            <RowAction
+                              icon={PackageCheck}
+                              label="Marcar entregado"
+                              onClick={() => markDelivered(s.id)}
+                            />
+                          )}
+                          {!reviewed.has(s.id) && (
+                            <RowAction
+                              icon={Star}
+                              label="Agregar reseña"
+                              onClick={() => setReviewSale(s)}
+                            />
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right font-display text-sm font-bold text-bone">
                       {formatPrice(s.soldPrice, s.currency)}
@@ -167,11 +231,17 @@ export default function AdminSalesPage() {
         )}
       </Panel>
 
-      {/* Registrar venta: elegir pieza → confirmar */}
+      {/* Registrar venta: elegir pieza → elegir cliente → confirmar */}
       <Modal
         open={registering}
         onClose={closeRegister}
-        title={picked ? "Registrar venta" : "Elegir pieza vendida"}
+        title={
+          !picked
+            ? "Elegir pieza vendida"
+            : pickedCustomer === undefined
+              ? "Elegir cliente"
+              : "Registrar venta"
+        }
       >
         {!picked ? (
           <div className="flex flex-col gap-3">
@@ -232,18 +302,209 @@ export default function AdminSalesPage() {
               </ul>
             )}
           </div>
+        ) : pickedCustomer === undefined ? (
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => setPickedCustomer(null)}
+              className="border border-char px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-bone/70 transition-colors hover:border-ember hover:text-ember"
+            >
+              Venta sin cliente registrado
+            </button>
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-bone/40" />
+              <Input
+                value={customerQuery}
+                onChange={(e) => setCustomerQuery(e.target.value)}
+                placeholder="Buscar cliente por nombre, email o teléfono…"
+                className="pl-10"
+                autoFocus
+              />
+            </div>
+
+            {matchingCustomers.length === 0 ? (
+              <p className="py-8 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-bone/35">
+                Sin clientes que coincidan.
+              </p>
+            ) : (
+              <ul className="max-h-[40vh] divide-y divide-char overflow-y-auto">
+                {matchingCustomers.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => setPickedCustomer(c)}
+                      className="flex w-full flex-col items-start px-1 py-3 text-left transition-colors hover:bg-bone/5"
+                    >
+                      <span className="font-display text-sm uppercase tracking-wide text-bone">
+                        {c.name}
+                      </span>
+                      <span className="font-mono text-[10px] tracking-[0.1em] text-bone/35">
+                        {[c.email, c.phone].filter(Boolean).join(" · ")}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         ) : (
           <MarkSoldForm
             product={picked}
             categories={categories}
+            customerName={pickedCustomer?.name}
             onConfirm={(input) => {
-              markSold(picked.id, input);
+              markSold(picked.id, { ...input, userId: pickedCustomer?.id });
               closeRegister();
             }}
             onCancel={() => setPicked(null)}
           />
         )}
       </Modal>
+
+      {/* Marcar enviado */}
+      <Modal open={!!shipSale} onClose={() => setShipSale(null)} title="Marcar enviado">
+        {shipSale && (
+          <ShipForm
+            sale={shipSale}
+            defaultDepartment={customers.find((c) => c.id === shipSale.userId)?.department}
+            onConfirm={(input) => {
+              markShipped(shipSale.id, input);
+              setShipSale(null);
+            }}
+            onCancel={() => setShipSale(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Agregar reseña a una venta ya registrada */}
+      <Modal open={!!reviewSale} onClose={() => setReviewSale(null)} title="Agregar reseña">
+        {reviewSale && (
+          <AdminReviewForm
+            defaultName={customerName(reviewSale.userId)}
+            onConfirm={(input) => {
+              submitAdminReview(reviewSale.id, input);
+              setReviewSale(null);
+            }}
+            onCancel={() => setReviewSale(null)}
+          />
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function RowAction({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.12em] text-bone/50 transition-colors hover:text-ember"
+    >
+      <Icon className="h-3 w-3" /> {label}
+    </button>
+  );
+}
+
+function ShipForm({
+  sale,
+  defaultDepartment,
+  onConfirm,
+  onCancel,
+}: {
+  sale: Sale;
+  defaultDepartment?: string;
+  onConfirm: (input: { department?: string; note?: string }) => void;
+  onCancel: () => void;
+}) {
+  const [department, setDepartment] = useState(sale.shippingDepartment ?? defaultDepartment ?? "");
+  const [note, setNote] = useState(sale.shippingNote ?? "");
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-bone/60">
+        {sale.productName}
+      </p>
+      <label className="flex flex-col gap-1.5">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-bone/45">
+          Departamento de destino
+        </span>
+        <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Ej. Santa Cruz" />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-bone/45">
+          Nota de envío (opcional)
+        </span>
+        <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Transportadora, nº de guía…" />
+      </label>
+      <div className="flex justify-end gap-3 border-t border-char pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="border border-bone/30 px-5 py-3 font-display text-sm font-semibold uppercase tracking-[0.12em] text-bone transition-colors hover:border-bone"
+        >
+          Cancelar
+        </button>
+        <Button onClick={() => onConfirm({ department: department.trim(), note: note.trim() })}>
+          Confirmar envío
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AdminReviewForm({
+  defaultName,
+  onConfirm,
+  onCancel,
+}: {
+  defaultName?: string;
+  onConfirm: (input: { rating: number; comment?: string; reviewerName?: string }) => void;
+  onCancel: () => void;
+}) {
+  const [reviewerName, setReviewerName] = useState(defaultName ?? "");
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+
+  return (
+    <div className="flex flex-col gap-4">
+      <ReviewFields
+        reviewerName={reviewerName}
+        onReviewerNameChange={setReviewerName}
+        rating={rating}
+        onRatingChange={setRating}
+        comment={comment}
+        onCommentChange={setComment}
+      />
+      <div className="flex justify-end gap-3 border-t border-char pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="border border-bone/30 px-5 py-3 font-display text-sm font-semibold uppercase tracking-[0.12em] text-bone transition-colors hover:border-bone"
+        >
+          Cancelar
+        </button>
+        <Button
+          disabled={rating === 0}
+          onClick={() =>
+            onConfirm({
+              rating,
+              comment: comment.trim() || undefined,
+              reviewerName: reviewerName.trim() || undefined,
+            })
+          }
+        >
+          Guardar reseña
+        </Button>
+      </div>
     </div>
   );
 }

@@ -9,7 +9,7 @@
  * Si una consulta falla, se registra y se devuelve un fallback vacío para que la
  * vitrina degrade con elegancia en vez de tirar la página entera.
  */
-import type { Combo, ComboItem, Product } from "./types";
+import type { Combo, ComboItem, Product, ProductRating, ProductReview } from "./types";
 import { createPublicClient } from "./supabase/server";
 
 // products + sus imágenes + su descuento vigente (join anidado de PostgREST)
@@ -286,4 +286,61 @@ export async function getComboBySlug(slug: string): Promise<Combo | undefined> {
     return undefined;
   }
   return data ? mapCombo(data as unknown as DbCombo) : undefined;
+}
+
+interface DbRating {
+  product_id: string;
+  avg_rating: number | string;
+  review_count: number;
+}
+
+/** Promedio y conteo de reseñas de un producto (vista `product_ratings`). */
+export async function getProductRating(productId: string): Promise<ProductRating | null> {
+  const sb = createPublicClient();
+  const { data, error } = await sb
+    .from("product_ratings")
+    .select("avg_rating,review_count")
+    .eq("product_id", productId)
+    .maybeSingle<DbRating>();
+  if (error) {
+    console.error("getProductRating:", error.message);
+    return null;
+  }
+  if (!data) return null;
+  return { avg: Number(data.avg_rating), count: data.review_count };
+}
+
+interface DbReview {
+  id: string;
+  sale_id: string;
+  product_id: string;
+  reviewer_name: string | null;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
+
+/** Reseñas públicas de un producto (más recientes primero). Incluye tanto las
+ *  enviadas por el cliente como las cargadas por el admin — se ven idénticas. */
+export async function getProductReviews(productId: string): Promise<ProductReview[]> {
+  const sb = createPublicClient();
+  const { data, error } = await sb
+    .from("product_reviews")
+    .select("id,sale_id,product_id,reviewer_name,rating,comment,created_at")
+    .eq("product_id", productId)
+    .eq("hidden", false)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("getProductReviews:", error.message);
+    return [];
+  }
+  return (data as unknown as DbReview[]).map((r) => ({
+    id: r.id,
+    saleId: r.sale_id,
+    productId: r.product_id,
+    reviewerName: r.reviewer_name ?? "Cliente",
+    rating: r.rating,
+    comment: r.comment ?? undefined,
+    createdAt: r.created_at,
+  }));
 }

@@ -27,12 +27,17 @@ export interface Database {
       profiles: GenericTable;
       factions: GenericTable;
       legions: GenericTable;
+      product_reviews: GenericTable;
     };
     Views: { [key: string]: GenericTable };
     Functions: {
       mark_product_sold: { Args: GenericRow; Returns: GenericRow };
       increment_product_clicks: { Args: GenericRow; Returns: undefined };
       is_admin: { Args: GenericRow; Returns: boolean };
+      mark_sale_shipped: { Args: GenericRow; Returns: GenericRow };
+      confirm_delivery: { Args: GenericRow; Returns: GenericRow };
+      submit_product_review: { Args: GenericRow; Returns: GenericRow };
+      admin_submit_product_review: { Args: GenericRow; Returns: GenericRow };
     };
     Enums: { [key: string]: string };
     CompositeTypes: { [key: string]: GenericRow };

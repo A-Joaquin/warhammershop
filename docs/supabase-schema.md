@@ -723,3 +723,49 @@ order by clicks desc;
 > en el SQL Editor, hazte admin (§7) y configura el panel (§15). Luego
 > **conectamos el código** (cliente Supabase + reemplazar los helpers mock de
 > `lib/data.ts`, `lib/admin-store.tsx` y `lib/account-context.tsx`).
+
+---
+
+## 16. Post-venta: envío, confirmación de entrega y reseñas (2026-07-16)
+
+> Migración añadida al final de `supabase-schema.sql`. Resumen — ver el script
+> para el SQL completo.
+
+- **`sales`** gana columnas: `user_id` (cliente registrado, opcional — lo elige el
+  admin al registrar la venta), `delivery_status` (`pendiente` → `enviado` →
+  `entregado`), `shipping_department`, `shipping_note`, `shipped_at`, `delivered_at`.
+- **`product_reviews`** (nueva): reseña 1-5 estrellas + comentario, ligada 1:1 a
+  una venta (`sale_id` único). `user_id` es **nullable** — queda `null` cuando la
+  carga el admin a nombre de un comprador sin cuenta. `submitted_by`
+  (`customer`/`admin`) es solo referencia interna, **nunca se muestra** en el
+  front público (las reseñas cargadas por el admin se ven igual que las reales).
+- **Vista `product_ratings`**: promedio y conteo de reseñas por producto, para la
+  ficha pública.
+- **RPCs nuevas** (todas `security definer`, mismo patrón que `mark_product_sold`):
+  - `mark_sale_shipped(sale_id, depto?, nota?)` — admin marca envío.
+  - `confirm_delivery(sale_id)` — el cliente confirma que le llegó (desde su cuenta).
+  - `submit_product_review(sale_id, rating, comment?)` — el cliente califica una
+    compra ya entregada (una vez por venta).
+  - `admin_submit_product_review(sale_id, rating, comment?, reviewer_name?)` —
+    el admin carga una reseña aproximada a nombre de un comprador (típicamente
+    sin cuenta); no exige `delivery_status = 'entregado'`.
+  - `mark_product_sold` se redefine para aceptar `p_user_id` opcional.
+- **RLS**: `sales` gana policy de lectura propia (`auth.uid() = user_id`, "Mis
+  compras" en `/cuenta`); `product_reviews` es de lectura pública + gestión
+  admin. Las mutaciones de cliente (confirmar entrega, calificar) no necesitan
+  policy de UPDATE/INSERT propia porque van por RPC `security definer`.
+
+### 16.1 Moderación de reseñas (2026-07-16 b)
+
+- **`product_reviews`** gana `hidden` (admin oculta una reseña de la ficha
+  pública sin borrarla — mismo patrón que `sales.hidden`) y `admin_seen`
+  (el "visto" de la bandeja de moderación).
+- **`product_ratings`** ahora excluye las ocultas del promedio.
+- **RLS**: lectura pública solo `not hidden`; el autor (`auth.uid() = user_id`)
+  siempre ve la suya, esté oculta o no — así puede seguir viéndola en "Mis
+  compras" aunque el admin la haya ocultado del resto. El admin ya tenía
+  acceso total (policy "admin gestiona resenas"), así que ocultar/mostrar y
+  marcar "visto" son `update` directos, sin RPC nueva.
+- **Aviso al admin**: sin email/push — es un badge dentro del panel
+  (`/admin/resenas` + sidebar + dashboard) que cuenta reseñas de ≤3★ con
+  `admin_seen = false`. Se limpia cuando el admin abre esa página.

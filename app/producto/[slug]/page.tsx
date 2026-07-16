@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, Package, Tag, Boxes } from "lucide-react";
-import { getProductBySlug, getAllProducts, getRelated } from "@/lib/catalog";
+import {
+  getProductBySlug,
+  getAllProducts,
+  getRelated,
+  getProductRating,
+  getProductReviews,
+} from "@/lib/catalog";
 import { discountedPrice, isDiscountActive } from "@/lib/types";
 import { factionName } from "@/lib/data/factions";
 import { formatPrice, formatDate } from "@/lib/utils";
@@ -13,6 +19,7 @@ import { ProductCard } from "@/components/catalog/product-card";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { AddToCartButton } from "@/components/cart/add-to-cart-button";
 import { ProductClickTracker } from "@/components/catalog/product-click-tracker";
+import { ProductReviews } from "@/components/catalog/product-reviews";
 import { StatusBadge, DiscountBadge, CONDITION_LABEL } from "@/components/catalog/status-badge";
 import { Eyebrow } from "@/components/section";
 
@@ -63,7 +70,11 @@ export default async function ProductPage({
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const related = await getRelated(product);
+  const [related, rating, reviews] = await Promise.all([
+    getRelated(product),
+    getProductRating(product.id),
+    getProductReviews(product.id),
+  ]);
   const isComingSoon = product.status === "coming_soon";
   const isSold = product.status === "sold";
   const hasDiscount = isDiscountActive(product.discount);
@@ -84,6 +95,13 @@ export default async function ProductPage({
       availability: AVAILABILITY[product.status],
       url: `${SITE.url}/producto/${product.slug}`,
     },
+    ...(rating && {
+      aggregateRating: {
+        "@type": "AggregateRating",
+        ratingValue: rating.avg,
+        reviewCount: rating.count,
+      },
+    }),
   };
 
   return (
@@ -204,6 +222,8 @@ export default async function ProductPage({
             </div>
           </section>
         )}
+
+        <ProductReviews rating={rating} reviews={reviews} />
       </div>
     </article>
   );

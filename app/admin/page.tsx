@@ -8,6 +8,7 @@ import {
   Rocket,
   ArrowUpRight,
   TrendingUp,
+  Star,
 } from "lucide-react";
 import { useAdminStore } from "@/lib/contexts/admin-store";
 import { formatPrice, formatDate } from "@/lib/utils";
@@ -60,6 +61,13 @@ export default function AdminDashboard() {
           label="Próximos lanzamientos"
           value={stats.comingSoon}
           href="/admin/lanzamientos"
+        />
+        <Stat
+          icon={Star}
+          label="Reseñas bajas sin revisar"
+          value={stats.lowReviewsUnseen}
+          href="/admin/resenas"
+          highlight={stats.lowReviewsUnseen > 0}
         />
       </div>
 

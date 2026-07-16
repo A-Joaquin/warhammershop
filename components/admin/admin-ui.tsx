@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { ReservationStatus, SaleChannel } from "@/lib/types";
+import type { DeliveryStatus, ReservationStatus, SaleChannel } from "@/lib/types";
 
 /** Cabecera de página del admin. */
 export function PageHeader({
@@ -92,3 +92,29 @@ export const RESERVATION_STATUSES: ReservationStatus[] = [
   "cumplida",
   "cancelada",
 ];
+
+const DELIVERY_STATUS_MAP: Record<
+  DeliveryStatus,
+  { label: string; className: string }
+> = {
+  pendiente: { label: "Preparando", className: "text-gold border-gold/40 bg-gold/10" },
+  enviado: { label: "Enviado", className: "text-sky-300 border-sky-400/40 bg-sky-400/10" },
+  entregado: {
+    label: "Entregado",
+    className: "text-emerald-300 border-emerald-400/40 bg-emerald-400/10",
+  },
+};
+
+export function DeliveryStatusBadge({ status }: { status: DeliveryStatus }) {
+  const s = DELIVERY_STATUS_MAP[status];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em]",
+        s.className
+      )}
+    >
+      {s.label}
+    </span>
+  );
+}

@@ -644,3 +644,225 @@ drop policy if exists "catalogo lectura publica" on discounts;
 create policy "catalogo lectura publica" on discounts for select using (true);
 drop policy if exists "admin gestiona discounts" on discounts;
 create policy "admin gestiona discounts" on discounts for all using (is_admin()) with check (is_admin());
+
+-- =============================================================================
+-- MIGRACIÓN 2026-07-16: post-venta (envío + confirmación + reseñas)
+-- =============================================================================
+
+do $$ begin create type delivery_status as enum ('pendiente','enviado','entregado');
+  exception when duplicate_object then null; end $$;
+
+alter table sales add column if not exists user_id uuid references auth.users(id) on delete set null;
+alter table sales add column if not exists delivery_status delivery_status not null default 'pendiente';
+alter table sales add column if not exists shipping_department text;
+alter table sales add column if not exists shipping_note text;
+alter table sales add column if not exists shipped_at timestamptz;
+alter table sales add column if not exists delivered_at timestamptz;
+create index if not exists idx_sales_user on sales (user_id);
+
+create table if not exists product_reviews (
+  id            uuid primary key default gen_random_uuid(),
+  sale_id       uuid not null unique references sales(id) on delete cascade,
+  product_id    uuid not null references products(id) on delete cascade,
+  -- null cuando la reseña la carga el admin a nombre de un comprador sin cuenta.
+  user_id       uuid references auth.users(id) on delete cascade,
+  reviewer_name text,
+  rating        smallint not null check (rating between 1 and 5),
+  comment       text,
+  -- 'customer' = el cliente la envió desde /cuenta. 'admin' = el admin la cargó a
+  -- nombre de un comprador sin cuenta (o que no la dejó). Nunca se expone en el
+  -- front público — solo referencia interna.
+  submitted_by  text not null default 'customer' check (submitted_by in ('customer','admin')),
+  created_at    timestamptz not null default now()
+);
+create index if not exists idx_product_reviews_product on product_reviews (product_id);
+
+create or replace view public.product_ratings as
+  select product_id,
+         round(avg(rating)::numeric, 1) as avg_rating,
+         count(*)::int as review_count
+  from public.product_reviews
+  group by product_id;
+
+-- mark_product_sold: ahora acepta cliente opcional (p_user_id, default null =
+-- venta de mostrador sin cuenta). Redefine la función completa (mismo cuerpo +
+-- el nuevo parámetro e insert).
+create or replace function public.mark_product_sold(
+  p_product_id uuid,
+  p_sold_price numeric,
+  p_channel    sale_channel,
+  p_category2  text default null,
+  p_buyer_note text default null,
+  p_user_id    uuid default null
+)
+returns public.sales
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_product  public.products;
+  v_cost     numeric;
+  v_cost_usd numeric;
+  v_fx       numeric;
+  v_sale     public.sales;
+begin
+  if not public.is_admin() then raise exception 'No autorizado'; end if;
+  select * into v_product from public.products where id = p_product_id for update;
+  if not found then raise exception 'Producto no encontrado'; end if;
+  select coalesce(purchase_price, 0)     * (1 + coalesce(tax_rate, 0) / 100.0),
+         coalesce(purchase_price_usd, 0) * (1 + coalesce(tax_rate, 0) / 100.0),
+         fx_rate
+    into v_cost, v_cost_usd, v_fx
+    from public.product_costs where product_id = p_product_id;
+  v_cost := coalesce(v_cost, 0);
+  update public.products
+     set status = 'sold', stock_qty = 0, category2 = coalesce(p_category2, category2), updated_at = now()
+   where id = p_product_id;
+  insert into public.sales
+    (product_id, product_name, sku, sold_price, cost, cost_usd, fx_rate, currency, channel, category, category2, buyer_note, user_id)
+  values
+    (v_product.id, v_product.name, v_product.sku, p_sold_price, v_cost, v_cost_usd, v_fx, v_product.currency,
+     p_channel, v_product.category, coalesce(p_category2, v_product.category2), p_buyer_note, p_user_id)
+  returning * into v_sale;
+  return v_sale;
+end;
+$$;
+
+-- Admin marca la venta como enviada.
+create or replace function public.mark_sale_shipped(
+  p_sale_id uuid,
+  p_shipping_department text default null,
+  p_shipping_note text default null
+)
+returns public.sales
+language plpgsql security definer set search_path = public
+as $$
+declare v_sale public.sales;
+begin
+  if not public.is_admin() then raise exception 'No autorizado'; end if;
+  update public.sales
+     set delivery_status = 'enviado',
+         shipped_at = now(),
+         shipping_department = coalesce(p_shipping_department, shipping_department),
+         shipping_note = coalesce(p_shipping_note, shipping_note)
+   where id = p_sale_id
+  returning * into v_sale;
+  if not found then raise exception 'Venta no encontrada'; end if;
+  return v_sale;
+end;
+$$;
+
+-- Cliente confirma que le llegó su pedido.
+create or replace function public.confirm_delivery(p_sale_id uuid)
+returns public.sales
+language plpgsql security definer set search_path = public
+as $$
+declare v_sale public.sales;
+begin
+  select * into v_sale from public.sales where id = p_sale_id and user_id = auth.uid() for update;
+  if not found then raise exception 'No autorizado'; end if;
+  if v_sale.delivery_status = 'entregado' then raise exception 'Ya estaba confirmado'; end if;
+  update public.sales set delivery_status = 'entregado', delivered_at = now()
+   where id = p_sale_id
+  returning * into v_sale;
+  return v_sale;
+end;
+$$;
+
+-- Cliente califica el producto de una compra ya entregada (una vez por venta).
+create or replace function public.submit_product_review(
+  p_sale_id uuid,
+  p_rating  smallint,
+  p_comment text default null
+)
+returns public.product_reviews
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sale   public.sales;
+  v_name   text;
+  v_review public.product_reviews;
+begin
+  if p_rating < 1 or p_rating > 5 then raise exception 'Calificación inválida'; end if;
+  select * into v_sale from public.sales where id = p_sale_id and user_id = auth.uid();
+  if not found then raise exception 'No autorizado'; end if;
+  if v_sale.delivery_status <> 'entregado' then raise exception 'Aún no confirmas la entrega'; end if;
+  if exists (select 1 from public.product_reviews where sale_id = p_sale_id) then
+    raise exception 'Ya calificaste esta compra';
+  end if;
+  select name into v_name from public.profiles where id = auth.uid();
+  insert into public.product_reviews (sale_id, product_id, user_id, reviewer_name, rating, comment)
+  values (p_sale_id, v_sale.product_id, auth.uid(), coalesce(v_name, 'Cliente'), p_rating, nullif(trim(p_comment), ''))
+  returning * into v_review;
+  return v_review;
+end;
+$$;
+
+-- Admin carga una reseña aproximada a nombre de un comprador (típicamente sin
+-- cuenta). No exige delivery_status = 'entregado': el admin puede saber por otro
+-- medio (WhatsApp, en persona) que ya la recibió, aunque el sistema no lo refleje.
+create or replace function public.admin_submit_product_review(
+  p_sale_id       uuid,
+  p_rating        smallint,
+  p_comment       text default null,
+  p_reviewer_name text default null
+)
+returns public.product_reviews
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sale   public.sales;
+  v_review public.product_reviews;
+begin
+  if not public.is_admin() then raise exception 'No autorizado'; end if;
+  if p_rating < 1 or p_rating > 5 then raise exception 'Calificación inválida'; end if;
+  select * into v_sale from public.sales where id = p_sale_id;
+  if not found then raise exception 'Venta no encontrada'; end if;
+  if exists (select 1 from public.product_reviews where sale_id = p_sale_id) then
+    raise exception 'Esta venta ya tiene una reseña';
+  end if;
+  insert into public.product_reviews (sale_id, product_id, user_id, reviewer_name, rating, comment, submitted_by)
+  values (p_sale_id, v_sale.product_id, null, coalesce(nullif(trim(p_reviewer_name), ''), 'Cliente'), p_rating, nullif(trim(p_comment), ''), 'admin')
+  returning * into v_review;
+  return v_review;
+end;
+$$;
+
+alter table product_reviews enable row level security;
+drop policy if exists "resenas lectura publica" on product_reviews;
+create policy "resenas lectura publica" on product_reviews for select using (true);
+drop policy if exists "admin gestiona resenas" on product_reviews;
+create policy "admin gestiona resenas" on product_reviews for all using (is_admin()) with check (is_admin());
+
+drop policy if exists "cliente ve sus compras" on sales;
+create policy "cliente ve sus compras" on sales for select using (auth.uid() = user_id);
+
+-- =============================================================================
+-- MIGRACIÓN 2026-07-16 (b): moderación de reseñas (ocultar + aviso al admin)
+-- =============================================================================
+-- El admin puede ocultar reseñas de la ficha pública (p.ej. malas de 3★ o menos)
+-- sin borrarlas — mismo patrón que `sales.hidden`. El autor de la reseña sigue
+-- viéndola en "Mis compras" aunque esté oculta para el resto. `admin_seen` es el
+-- "visto" de la bandeja de moderación: se pone en true cuando el admin abre
+-- /admin/resenas; el badge del panel cuenta las de ≤3★ con `admin_seen = false`.
+
+alter table product_reviews add column if not exists hidden     boolean not null default false;
+alter table product_reviews add column if not exists admin_seen boolean not null default false;
+
+create or replace view public.product_ratings as
+  select product_id,
+         round(avg(rating)::numeric, 1) as avg_rating,
+         count(*)::int as review_count
+  from public.product_reviews
+  where not hidden
+  group by product_id;
+
+-- Lectura pública: solo las no ocultas. El autor siempre ve la suya (aunque
+-- esté oculta). El admin ya tiene acceso total vía "admin gestiona resenas".
+drop policy if exists "resenas lectura publica" on product_reviews;
+create policy "resenas lectura publica" on product_reviews for select using (not hidden);
+drop policy if exists "resena propia lectura" on product_reviews;
+create policy "resena propia lectura" on product_reviews for select using (auth.uid() = user_id);
+
+-- Nota: ocultar/mostrar y marcar "visto" los hace el admin con un update directo
+-- sobre `product_reviews` (ya cubierto por la policy "admin gestiona resenas" =
+-- for all using (is_admin())); no hace falta una RPC nueva.

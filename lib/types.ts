@@ -92,6 +92,9 @@ export interface Faction {
 
 export type SaleChannel = "whatsapp" | "en_tienda" | "otro";
 
+/** Estado de envío/entrega de una venta (posventa). */
+export type DeliveryStatus = "pendiente" | "enviado" | "entregado";
+
 export interface Sale {
   id: string;
   productId: string;
@@ -108,6 +111,32 @@ export interface Sale {
   category2?: string; // 2ª categoría asignada en la venta
   buyerNote?: string;
   hidden: boolean; // oculta del listado admin sin borrar el registro
+  // --- Posventa ---
+  userId?: string; // cliente registrado vinculado a la venta (lo elige el admin)
+  deliveryStatus: DeliveryStatus;
+  shippingDepartment?: string;
+  shippingNote?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
+}
+
+/** Reseña de un producto (1-5 estrellas), ligada a una venta. Se muestra
+ *  públicamente en la ficha del producto. */
+export interface ProductReview {
+  id: string;
+  saleId: string;
+  productId: string;
+  reviewerName: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+  /** El admin la ocultó de la ficha pública (el autor la sigue viendo). */
+  hidden?: boolean;
+}
+
+export interface ProductRating {
+  avg: number;
+  count: number;
 }
 
 export interface ComboItem {

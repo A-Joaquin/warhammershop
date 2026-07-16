@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Input, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ComboBox } from "@/components/admin/combobox";
+import { ReviewFields } from "@/components/admin/review-fields";
 
 const CHANNELS: { value: SaleChannel; label: string }[] = [
   { value: "whatsapp", label: "WhatsApp" },
@@ -24,11 +25,14 @@ const CHANNELS: { value: SaleChannel; label: string }[] = [
 export function MarkSoldForm({
   product,
   categories,
+  customerName,
   onConfirm,
   onCancel,
 }: {
   product: Product;
   categories: string[];
+  /** Nombre del cliente registrado ya elegido en el paso anterior (si hay). */
+  customerName?: string;
   onConfirm: (input: MarkSoldInput) => void;
   onCancel: () => void;
 }) {
@@ -36,6 +40,11 @@ export function MarkSoldForm({
   const [channel, setChannel] = useState<SaleChannel>("whatsapp");
   const [category2, setCategory2] = useState(product.category2 ?? "");
   const [buyerNote, setBuyerNote] = useState("");
+
+  const [addReview, setAddReview] = useState(false);
+  const [reviewerName, setReviewerName] = useState("");
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
 
   const cost = productCost(product);
   const profit = (Number(soldPrice) || 0) - cost;
@@ -47,6 +56,14 @@ export function MarkSoldForm({
       channel,
       category2: category2.trim() || undefined,
       buyerNote: buyerNote.trim() || undefined,
+      review:
+        addReview && reviewRating > 0
+          ? {
+              rating: reviewRating,
+              comment: reviewComment.trim() || undefined,
+              reviewerName: reviewerName.trim() || customerName || undefined,
+            }
+          : undefined,
     });
   };
 
@@ -61,6 +78,11 @@ export function MarkSoldForm({
           {product.category ? ` · ${product.category}` : ""} · costo{" "}
           {formatPrice(cost, product.currency)}
         </p>
+        {customerName && (
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-ember/80">
+            Cliente: {customerName}
+          </p>
+        )}
       </div>
 
       <label className="flex flex-col gap-1.5">
@@ -131,6 +153,33 @@ export function MarkSoldForm({
           placeholder="Comprador, detalle de envío, etc."
         />
       </label>
+
+      <div className="border-t border-char pt-4">
+        <button
+          type="button"
+          onClick={() => setAddReview((v) => !v)}
+          className="font-mono text-[11px] uppercase tracking-[0.14em] text-ember/80 hover:text-ember"
+        >
+          {addReview ? "− Quitar reseña aproximada" : "+ Reseña aproximada del cliente (opcional)"}
+        </button>
+        {!customerName && (
+          <p className="mt-1 font-mono text-[9px] tracking-[0.1em] text-bone/35">
+            Útil sobre todo si el comprador no tiene cuenta y nunca podrá calificar por su cuenta.
+          </p>
+        )}
+        {addReview && (
+          <div className="mt-4">
+            <ReviewFields
+              reviewerName={reviewerName}
+              onReviewerNameChange={setReviewerName}
+              rating={reviewRating}
+              onRatingChange={setReviewRating}
+              comment={reviewComment}
+              onCommentChange={setReviewComment}
+            />
+          </div>
+        )}
+      </div>
 
       <div className="flex justify-end gap-3 border-t border-char pt-4">
         <button
